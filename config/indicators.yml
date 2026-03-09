@@ -1,0 +1,14 @@
+refresh_seconds: 120
+
+indicators:
+  - name: Dollar Index (DXY)
+    symbol: "$DXY"
+    direction: -1
+    weight: 1.0
+    enabled: true
+
+  - name: Cotton (Continuous)
+    symbol: "CT*0"
+    direction: 1
+    weight: 1.0
+    enabled: true
