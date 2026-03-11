@@ -25,12 +25,6 @@ from data.scoring import (
     weighted_composite_score,
 )
 
-# ------------------------------------------------------------
-# Import autorefresh 1s
-# ------------------------------------------------------------
-from streamlit_autorefresh import st_autorefresh
-
-
 # ============================================================
 # STREAMLIT PAGE CONFIG
 # ============================================================
@@ -39,7 +33,6 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed",
 )
-st_autorefresh(interval=1000, key="dashboard_refresh")
 
 # ============================================================
 # STYLING
@@ -914,23 +907,30 @@ with top4:
         """
         <div class="top-card">
             <div class="top-card-label">Last Update</div>
-            <div id="clock" class="top-card-value"></div>
+            <div class="top-card-value">
+                <span id="clock">--:--:--</span>
+            </div>
             <div class="top-card-sub">Demo mode</div>
         </div>
 
         <script>
-        function updateClock() {
-            const now = new Date();
-            const time =
-                String(now.getHours()).padStart(2,'0') + ":" +
-                String(now.getMinutes()).padStart(2,'0') + ":" +
-                String(now.getSeconds()).padStart(2,'0');
+        (function() {
+            function updateClock() {
+                const now = new Date();
+                const time =
+                    String(now.getHours()).padStart(2, "0") + ":" +
+                    String(now.getMinutes()).padStart(2, "0") + ":" +
+                    String(now.getSeconds()).padStart(2, "0");
 
-            document.getElementById("clock").innerHTML = time;
-        }
+                const el = window.parent.document.getElementById("clock");
+                if (el) {
+                    el.textContent = time;
+                }
+            }
 
-        setInterval(updateClock, 1000);
-        updateClock();
+            updateClock();
+            setInterval(updateClock, 1000);
+        })();
         </script>
         """,
         unsafe_allow_html=True,
