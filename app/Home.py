@@ -255,6 +255,17 @@ def color_pos_neg(val):
     else:
         return "color: #dfe6f5;"
 
+def color_bias(val):
+    """
+    Color textual bias values.
+    """
+    if str(val).lower() == "bullish":
+        return "color: #59d98e; font-weight: 600;"
+    elif str(val).lower() == "bearish":
+        return "color: #ff6b6b; font-weight: 600;"
+    else:
+        return "color: #f1c75b; font-weight: 600;"
+
 
 def style_market_table(df: pd.DataFrame):
     """
@@ -301,20 +312,31 @@ def style_market_table_int(df: pd.DataFrame):
 def style_indicator_table(df: pd.DataFrame):
     """
     Styling for Cotton #2 Indicators
+    More robust: only applies styles to columns that actually exist.
     """
-    return (
-        df.style
-        .applymap(color_pos_neg, subset=["Vs Last Day", "Vs Last Week"])
-        .applymap(color_pos_neg, subset=["Bias"])
-        .format(
-            {
-                "Last": "{:,.2f}",
-                "Intensity": "{:,.0f}",
-                "Vs Last Day": "{:,.2f}",
-                "Vs Last Week": "{:,.2f}",
-            }
-        )
-    )
+    styler = df.style
+
+    existing_delta_cols = [c for c in ["Vs Last Day", "Vs Last Week"] if c in df.columns]
+    if existing_delta_cols:
+        styler = styler.applymap(color_pos_neg, subset=existing_delta_cols)
+
+    if "Bias" in df.columns:
+        styler = styler.applymap(color_bias, subset=["Bias"])
+
+    format_dict = {}
+    if "Last" in df.columns:
+        format_dict["Last"] = "{:,.2f}"
+    if "Intensity" in df.columns:
+        format_dict["Intensity"] = "{:,.0f}"
+    if "Vs Last Day" in df.columns:
+        format_dict["Vs Last Day"] = "{:,.2f}"
+    if "Vs Last Week" in df.columns:
+        format_dict["Vs Last Week"] = "{:,.2f}"
+
+    if format_dict:
+        styler = styler.format(format_dict)
+
+    return styler
 
 # ------------------------------------------------------------
 # STYLE FOR SIGNAL BREAKDOWN
@@ -322,18 +344,26 @@ def style_indicator_table(df: pd.DataFrame):
 def style_signal_table(df: pd.DataFrame):
     """
     Styling for the signal breakdown table
+    More robust: only applies styles to columns that exist.
     """
-    return (
-        df.style
-        .applymap(color_pos_neg, subset=["Signal", "Contribution"])
-        .format(
-            {
-                "Signal": "{:+.2f}",
-                "Contribution": "{:+.2f}",
-                "Weight": "{:.2f}",
-            }
-        )
-    )
+    styler = df.style
+
+    existing_signal_cols = [c for c in ["Signal", "Contribution"] if c in df.columns]
+    if existing_signal_cols:
+        styler = styler.applymap(color_pos_neg, subset=existing_signal_cols)
+
+    format_dict = {}
+    if "Signal" in df.columns:
+        format_dict["Signal"] = "{:+.2f}"
+    if "Contribution" in df.columns:
+        format_dict["Contribution"] = "{:+.2f}"
+    if "Weight" in df.columns:
+        format_dict["Weight"] = "{:.2f}"
+
+    if format_dict:
+        styler = styler.format(format_dict)
+
+    return styler
 
 
 # ============================================================
