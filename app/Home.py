@@ -911,17 +911,30 @@ with top3:
 
 with top4:
     st.markdown(
-        f"""
+        """
         <div class="top-card">
             <div class="top-card-label">Last Update</div>
-            <div class="top-card-value">{datetime.now().strftime("%H:%M:%S")}</div>
+            <div id="clock" class="top-card-value"></div>
             <div class="top-card-sub">Demo mode</div>
         </div>
+
+        <script>
+        function updateClock() {
+            const now = new Date();
+            const time =
+                String(now.getHours()).padStart(2,'0') + ":" +
+                String(now.getMinutes()).padStart(2,'0') + ":" +
+                String(now.getSeconds()).padStart(2,'0');
+
+            document.getElementById("clock").innerHTML = time;
+        }
+
+        setInterval(updateClock, 1000);
+        updateClock();
+        </script>
         """,
         unsafe_allow_html=True,
     )
-
-st.divider()
 
 # ============================================================
 # MAIN MARKET MONITOR LAYOUT
