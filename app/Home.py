@@ -938,7 +938,8 @@ with top_left:
     # Softs section
     # --------------------------------------------------------
     softs_avg_intensity = softs_indicator_df["Intensity"].mean()
-    softs_avg_bias = "Bullish" if softs_indicator_df["Vs Last Week"].mean() > 0 else "Bearish" if softs_indicator_df["Vs Last Week"].mean() < 0 else "Neutral"
+    softs_weekly_mean = softs_indicator_df["_weekly_num"].mean()
+    softs_avg_bias = "Bullish" if softs_weekly_mean > 0 else "Bearish" if softs_weekly_mean < 0 else "Neutral"
     softs_avg_class = "score-bullish" if softs_avg_bias == "Bullish" else "score-bearish" if softs_avg_bias == "Bearish" else "score-neutral"
 
     st.markdown("**Softs**")
