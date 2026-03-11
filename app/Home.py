@@ -351,16 +351,13 @@ def style_signal_table(df: pd.DataFrame):
     """
     styler = df.style
 
-    # Driver names in Bloomberg orange
     if "Driver" in df.columns:
         styler = styler.applymap(color_ticker, subset=["Driver"])
 
-    # Numeric signal-like columns in green / red
     existing_signal_cols = [c for c in ["Signal", "Contribution"] if c in df.columns]
     if existing_signal_cols:
         styler = styler.applymap(color_pos_neg, subset=existing_signal_cols)
 
-    # Clean display format
     format_dict = {}
     if "Signal" in df.columns:
         format_dict["Signal"] = "{:+.2f}"
@@ -369,8 +366,7 @@ def style_signal_table(df: pd.DataFrame):
     if "Weight" in df.columns:
         format_dict["Weight"] = "{:.2f}"
 
-    if format_dict:
-        styler = styler.format(format_dict)
+    styler = styler.format(format_dict)
 
     return styler
 
@@ -923,11 +919,7 @@ with top_right:
         '<div class="section-subtitle">How the composite score is built.</div>',
         unsafe_allow_html=True,
     )
-    st.dataframe(
-        style_indicator_table(breakdown_df),
-        use_container_width=True,
-        hide_index=True,
-        height=245,
+    st.table(style_signal_table(breakdown_df)
     )
     st.markdown('</div>', unsafe_allow_html=True)
 
