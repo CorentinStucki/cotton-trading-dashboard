@@ -232,6 +232,68 @@ def build_quote_rows(raw_rows: list[dict]) -> pd.DataFrame:
     df = pd.DataFrame(raw_rows)
     return df[["Ticker", "Last Price", "Net", "%1D"]]
 
+def color_ticker(val):
+    """
+    Bloomberg-like orange for tickers.
+    """
+    return "color: #f5a623; font-weight: 600;"
+
+
+def color_pos_neg(val):
+    """
+    Green if positive, red if negative, neutral grey if zero / missing.
+    """
+    try:
+        v = float(val)
+    except Exception:
+        return "color: #dfe6f5;"
+
+    if v > 0:
+        return "color: #59d98e; font-weight: 600;"
+    elif v < 0:
+        return "color: #ff6b6b; font-weight: 600;"
+    else:
+        return "color: #dfe6f5;"
+
+
+def style_market_table(df: pd.DataFrame):
+    """
+    Apply Bloomberg-like styling to market monitor tables.
+    - Ticker in orange
+    - Net / %1D green or red depending on sign
+    """
+    return (
+        df.style
+        .applymap(color_ticker, subset=["Ticker"])
+        .applymap(color_pos_neg, subset=["Net", "%1D"])
+        .format(
+            {
+                "Last Price": "{:,.1f}",
+                "Net": "{:,.1f}",
+                "%1D": "{:,.1f}",
+            },
+            na_rep=""
+        )
+    )
+
+
+def style_market_table_int(df: pd.DataFrame):
+    """
+    Variant for mostly integer-like tables.
+    """
+    return (
+        df.style
+        .applymap(color_ticker, subset=["Ticker"])
+        .applymap(color_pos_neg, subset=["Net", "%1D"])
+        .format(
+            {
+                "Last Price": "{:,.0f}",
+                "Net": "{:,.0f}",
+                "%1D": "{:,.1f}",
+            },
+            na_rep=""
+        )
+    )
 
 # ============================================================
 # BUILD THE CORE SIMULATED DATASET
@@ -813,7 +875,7 @@ with mid_left:
     with overview_left:
         st.markdown("**Broad**")
         st.dataframe(
-            market_tables["broad"],
+            style_market_table(market_tables["broad"]),
             use_container_width=True,
             hide_index=True,
             height=165,
@@ -822,7 +884,7 @@ with mid_left:
     with overview_right:
         st.markdown("**Energy**")
         st.dataframe(
-            market_tables["energy"],
+            style_market_table(market_tables["energy"]),
             use_container_width=True,
             hide_index=True,
             height=315,
@@ -830,7 +892,7 @@ with mid_left:
 
         st.markdown("**Metals**")
         st.dataframe(
-            market_tables["metals"],
+            style_market_table(market_tables["metals"]),
             use_container_width=True,
             hide_index=True,
             height=455,
@@ -841,7 +903,7 @@ with mid_left:
     # --------------------------------------------------------
     st.markdown("**Agriculture / Softs**")
     st.dataframe(
-        market_tables["agriculture"],
+        style_market_table(market_tables["agriculture"]),
         use_container_width=True,
         hide_index=True,
         height=350,
@@ -859,7 +921,7 @@ with mid_right:
 
     st.markdown("**Energy**")
     st.dataframe(
-        market_tables["china_energy"],
+        style_market_table_int(market_tables["china_energy"]),
         use_container_width=True,
         hide_index=True,
         height=155,
@@ -867,7 +929,7 @@ with mid_right:
 
     st.markdown("**Metals**")
     st.dataframe(
-        market_tables["china_metals"],
+        style_market_table_int(market_tables["china_metals"]),
         use_container_width=True,
         hide_index=True,
         height=455,
@@ -875,7 +937,7 @@ with mid_right:
 
     st.markdown("**Agriculture / Softs / Oilseeds**")
     st.dataframe(
-        market_tables["china_agriculture"],
+        style_market_table_int(market_tables["china_agriculture"]),
         use_container_width=True,
         hide_index=True,
         height=470,
@@ -901,7 +963,7 @@ idx_col1, idx_col2, idx_col3 = st.columns(3)
 with idx_col1:
     st.markdown("**Asia / Pacific**")
     st.dataframe(
-        market_tables["indices_asia"],
+        style_market_table_int(market_tables["indices_asia"]),
         use_container_width=True,
         hide_index=True,
         height=430,
@@ -910,7 +972,7 @@ with idx_col1:
 with idx_col2:
     st.markdown("**America**")
     st.dataframe(
-        market_tables["indices_america"],
+        style_market_table_int(market_tables["indices_america"]),
         use_container_width=True,
         hide_index=True,
         height=430,
@@ -919,7 +981,7 @@ with idx_col2:
 with idx_col3:
     st.markdown("**Europe**")
     st.dataframe(
-        market_tables["indices_europe"],
+        style_market_table_int(market_tables["indices_europe"]),
         use_container_width=True,
         hide_index=True,
         height=430,
