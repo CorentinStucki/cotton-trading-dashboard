@@ -25,6 +25,12 @@ from data.scoring import (
     weighted_composite_score,
 )
 
+# ------------------------------------------------------------
+# Import autorefresh 1s
+# ------------------------------------------------------------
+from streamlit_autorefresh import st_autorefresh
+
+
 # ============================================================
 # STREAMLIT PAGE CONFIG
 # ============================================================
@@ -33,6 +39,7 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed",
 )
+st_autorefresh(interval=1000, key="dashboard_refresh")
 
 # ============================================================
 # STYLING
