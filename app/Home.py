@@ -351,35 +351,59 @@ def style_market_table_int(df: pd.DataFrame):
 
     return styler
 
+def signed_arrow(value: float) -> str:
+    """
+    Arrow helper for directional labels.
+    """
+    if value > 0:
+        return "↑"
+    if value < 0:
+        return "↓"
+    return "→"
+
+def format_arrow_value(value: float, decimals: int = 2) -> str:
+    """
+    Formats numeric variations with an arrow.
+    Example: ↑ 1.25 / ↓ -0.84 / → 0.00
+    """
+    arrow = signed_arrow(value)
+    return f"{arrow} {value:.{decimals}f}"
+
+
 # ------------------------------------------------------------
 # STYLE FOR INDICATOR TABLES
 # ------------------------------------------------------------
 def style_indicator_table(df: pd.DataFrame):
     """
     Styling for Cotton #2 Indicators
-    More robust: only applies styles to columns that actually exist.
+    Uses hidden numeric helper columns for color styling while keeping
+    display columns with Bloomberg-like arrows.
     """
-    styler = df.style
+    display_df = df[["Variable", "Last", "Intensity", "Vs Last Day", "Vs Last Week", "Bias"]].copy()
+    styler = display_df.style
 
-    existing_delta_cols = [c for c in ["Vs Last Day", "Vs Last Week"] if c in df.columns]
-    if existing_delta_cols:
-        styler = styler.applymap(color_pos_neg, subset=existing_delta_cols)
+    # Color daily variation column using hidden numeric values
+    if "_daily_num" in df.columns:
+        daily_colors = [color_pos_neg(v) for v in df["_daily_num"]]
+        styler = styler.apply(lambda _: daily_colors, subset=["Vs Last Day"], axis=0)
 
-    if "Bias" in df.columns:
-        styler = styler.applymap(color_bias, subset=["Bias"])
+    # Color weekly variation column using hidden numeric values
+    if "_weekly_num" in df.columns:
+        weekly_colors = [color_pos_neg(v) for v in df["_weekly_num"]]
+        styler = styler.apply(lambda _: weekly_colors, subset=["Vs Last Week"], axis=0)
 
-    format_dict = {}
-    if "Last" in df.columns:
-        format_dict["Last"] = "{:,.2f}"
-    if "Intensity" in df.columns:
-        format_dict["Intensity"] = "{:,.0f}"
-    if "Vs Last Day" in df.columns:
-        format_dict["Vs Last Day"] = "{:,.2f}"
-    if "Vs Last Week" in df.columns:
-        format_dict["Vs Last Week"] = "{:,.2f}"
+    # Color bias text using hidden bias label
+    if "_bias_text" in df.columns:
+        bias_colors = [color_bias(v) for v in df["_bias_text"]]
+        styler = styler.apply(lambda _: bias_colors, subset=["Bias"], axis=0)
 
-    if format_dict:
-        styler = styler.format(format_dict)
+    # Format numeric columns
+    styler = styler.format(
+        {
+            "Last": "{:,.2f}",
+            "Intensity": "{:,.0f}",
+        }
+    )
 
     return styler
 
@@ -580,6 +604,7 @@ def build_indicator_df(snapshot_dict: dict[str, dict]) -> pd.DataFrame:
 
     for name, item in snapshot_dict.items():
         direction = "Bullish" if item["weekly_delta"] > 0 else "Bearish" if item["weekly_delta"] < 0 else "Neutral"
+        bias_arrow = "↑" if direction == "Bullish" else "↓" if direction == "Bearish" else "→"
 
         intensity = score_to_intensity(
             normalize_change_to_signal(
@@ -593,9 +618,16 @@ def build_indicator_df(snapshot_dict: dict[str, dict]) -> pd.DataFrame:
                 "Variable": name,
                 "Last": round(item["last"], 2),
                 "Intensity": intensity,
-                "Vs Last Day": round(item["daily_delta"], 2),
-                "Vs Last Week": round(item["weekly_delta"], 2),
-                "Bias": direction,
+
+                # Display versions with arrows
+                "Vs Last Day": format_arrow_value(item["daily_delta"], 2),
+                "Vs Last Week": format_arrow_value(item["weekly_delta"], 2),
+                "Bias": f"{bias_arrow} {direction}",
+
+                # Hidden numeric helper columns for styling
+                "_daily_num": round(item["daily_delta"], 2),
+                "_weekly_num": round(item["weekly_delta"], 2),
+                "_bias_text": direction,
             }
         )
 
