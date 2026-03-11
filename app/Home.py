@@ -967,7 +967,8 @@ with top_left:
     # Ags & Oilseeds section
     # --------------------------------------------------------
     ags_avg_intensity = ags_indicator_df["Intensity"].mean()
-    ags_avg_bias = "Bullish" if ags_indicator_df["Vs Last Week"].mean() > 0 else "Bearish" if ags_indicator_df["Vs Last Week"].mean() < 0 else "Neutral"
+    ags_weekly_mean = ags_indicator_df["_weekly_num"].mean()
+    ags_avg_bias = "Bullish" if ags_weekly_mean > 0 else "Bearish" if ags_weekly_mean < 0 else "Neutral"
     ags_avg_class = "score-bullish" if ags_avg_bias == "Bullish" else "score-bearish" if ags_avg_bias == "Bearish" else "score-neutral"
 
     st.markdown("**Ags & Oilseeds**")
