@@ -226,11 +226,11 @@ def format_last(value: float, decimals: int = 2) -> str:
 
 def build_quote_rows(raw_rows: list[dict]) -> pd.DataFrame:
     """
-    Creates a standard market monitor table with:
-    Ticker / Last Price / Net / %1D
+    Creates a standard market monitor table with display columns
+    plus hidden helper numeric columns used for styling.
     """
     df = pd.DataFrame(raw_rows)
-    return df[["Ticker", "Last Price", "Net", "%1D"]]
+    return df[["Ticker", "Last Price", "Net", "%1D", "_net_num", "_pct_num"]]
 
 def color_ticker(val):
     """
@@ -273,38 +273,83 @@ def style_market_table(df: pd.DataFrame):
     - Ticker in orange
     - Net / %1D green or red depending on sign
     """
-    return (
-        df.style
-        .applymap(color_ticker, subset=["Ticker"])
-        .applymap(color_pos_neg, subset=["Net", "%1D"])
-        .format(
-            {
-                "Last Price": "{:,.1f}",
-                "Net": "{:,.1f}",
-                "%1D": "{:,.1f}",
-            },
-            na_rep=""
+    display_df = df[["Ticker", "Last Price", "Net", "%1D"]].copy()
+
+    styler = display_df.style
+
+    # Bloomberg orange for tickers
+    styler = styler.applymap(color_ticker, subset=["Ticker"])
+
+    # Net coloring
+    if "_net_num" in df.columns:
+        net_colors = [
+            color_pos_neg(v) for v in df["_net_num"]
+        ]
+        styler = styler.apply(
+            lambda _: net_colors,
+            subset=["Net"],
+            axis=0,
         )
+
+    # %1D coloring
+    if "_pct_num" in df.columns:
+        pct_colors = [
+            color_pos_neg(v) for v in df["_pct_num"]
+        ]
+        styler = styler.apply(
+            lambda _: pct_colors,
+            subset=["%1D"],
+            axis=0,
+        )
+
+    styler = styler.format(
+        {
+            "Last Price": "{:,.1f}",
+        },
+        na_rep=""
     )
+
+    return styler
 
 
 def style_market_table_int(df: pd.DataFrame):
     """
-    Variant for mostly integer-like tables.
+    Variant for mostly integer-like market tables.
     """
-    return (
-        df.style
-        .applymap(color_ticker, subset=["Ticker"])
-        .applymap(color_pos_neg, subset=["Net", "%1D"])
-        .format(
-            {
-                "Last Price": "{:,.0f}",
-                "Net": "{:,.0f}",
-                "%1D": "{:,.1f}",
-            },
-            na_rep=""
+    display_df = df[["Ticker", "Last Price", "Net", "%1D"]].copy()
+
+    styler = display_df.style
+
+    styler = styler.applymap(color_ticker, subset=["Ticker"])
+
+    if "_net_num" in df.columns:
+        net_colors = [
+            color_pos_neg(v) for v in df["_net_num"]
+        ]
+        styler = styler.apply(
+            lambda _: net_colors,
+            subset=["Net"],
+            axis=0,
         )
+
+    if "_pct_num" in df.columns:
+        pct_colors = [
+            color_pos_neg(v) for v in df["_pct_num"]
+        ]
+        styler = styler.apply(
+            lambda _: pct_colors,
+            subset=["%1D"],
+            axis=0,
+        )
+
+    styler = styler.format(
+        {
+            "Last Price": "{:,.0f}",
+        },
+        na_rep=""
     )
+
+    return styler
 
 # ------------------------------------------------------------
 # STYLE FOR INDICATOR TABLES
@@ -493,27 +538,7 @@ else:
 # MARKET SNAPSHOT FOR "COTTON #2 INDICATORS"
 # ============================================================
 
-market_snapshot = {
-    "Dollar Index": {
-        "last": latest["DXY"],
-        "daily_delta": latest["DXY"] - prev["DXY"],
-        "weekly_delta": latest["DXY"] - week_ago["DXY"],
-    },
-    "Bloomberg Commodity Index": {
-        "last": latest["BCOM"],
-        "daily_delta": latest["BCOM"] - prev["BCOM"],
-        "weekly_delta": latest["BCOM"] - week_ago["BCOM"],
-    },
-    "Bloomberg Agri Index": {
-        "last": latest["BCOMAG"],
-        "daily_delta": latest["BCOMAG"] - prev["BCOMAG"],
-        "weekly_delta": latest["BCOMAG"] - week_ago["BCOMAG"],
-    },
-    "Crude Oil": {
-        "last": latest["CL1"],
-        "daily_delta": latest["CL1"] - prev["CL1"],
-        "weekly_delta": latest["CL1"] - week_ago["CL1"],
-    },
+softs_snapshot = {
     "Sugar": {
         "last": latest["SB1"],
         "daily_delta": latest["SB1"] - prev["SB1"],
@@ -529,6 +554,9 @@ market_snapshot = {
         "daily_delta": latest["CC1"] - prev["CC1"],
         "weekly_delta": latest["CC1"] - week_ago["CC1"],
     },
+}
+
+ags_snapshot = {
     "Corn": {
         "last": latest["C1"],
         "daily_delta": latest["C1"] - prev["C1"],
@@ -546,34 +574,36 @@ market_snapshot = {
     },
 }
 
-indicator_rows = []
 
-for name, item in market_snapshot.items():
-    direction = "Bullish" if item["weekly_delta"] > 0 else "Bearish" if item["weekly_delta"] < 0 else "Neutral"
+def build_indicator_df(snapshot_dict: dict[str, dict]) -> pd.DataFrame:
+    rows = []
 
-    # Special rule: rising DXY is bearish for cotton
-    if name == "Dollar Index":
-        direction = "Bearish" if item["weekly_delta"] > 0 else "Bullish" if item["weekly_delta"] < 0 else "Neutral"
+    for name, item in snapshot_dict.items():
+        direction = "Bullish" if item["weekly_delta"] > 0 else "Bearish" if item["weekly_delta"] < 0 else "Neutral"
 
-    intensity = score_to_intensity(
-        normalize_change_to_signal(
-            item["weekly_delta"],
-            scale=max(abs(item["last"]) * 0.01, 0.5),
+        intensity = score_to_intensity(
+            normalize_change_to_signal(
+                item["weekly_delta"],
+                scale=max(abs(item["last"]) * 0.01, 0.5),
+            )
         )
-    )
 
-    indicator_rows.append(
-        {
-            "Variable": name,
-            "Last": round(item["last"], 2),
-            "Intensity": intensity,
-            "Vs Last Day": round(item["daily_delta"], 2),
-            "Vs Last Week": round(item["weekly_delta"], 2),
-            "Bias": direction,
-        }
-    )
+        rows.append(
+            {
+                "Variable": name,
+                "Last": round(item["last"], 2),
+                "Intensity": intensity,
+                "Vs Last Day": round(item["daily_delta"], 2),
+                "Vs Last Week": round(item["weekly_delta"], 2),
+                "Bias": direction,
+            }
+        )
 
-indicator_df = pd.DataFrame(indicator_rows).sort_values("Intensity", ascending=False)
+    return pd.DataFrame(rows).sort_values("Intensity", ascending=False)
+
+
+softs_indicator_df = build_indicator_df(softs_snapshot)
+ags_indicator_df = build_indicator_df(ags_snapshot)
 
 # ============================================================
 # HELPERS FOR MARKET MONITOR TABLES
@@ -582,6 +612,8 @@ indicator_df = pd.DataFrame(indicator_rows).sort_values("Intensity", ascending=F
 def make_quote(ticker: str, last: float, prev_value: float | None = None, decimals: int = 1) -> dict:
     """
     Standard quote row used in all Bloomberg-style monitor tables.
+    Adds arrows for Net and %1D, while keeping numeric helper columns
+    for styling.
     """
     if prev_value is None:
         prev_value = last * 0.99
@@ -589,11 +621,20 @@ def make_quote(ticker: str, last: float, prev_value: float | None = None, decima
     net = last - prev_value
     pct = pct_change(last, prev_value)
 
+    net_arrow = "↑" if net > 0 else "↓" if net < 0 else "→"
+    pct_arrow = "↑" if pct > 0 else "↓" if pct < 0 else "→"
+
     return {
         "Ticker": ticker,
         "Last Price": round(last, decimals),
-        "Net": round(net, decimals),
-        "%1D": round(pct, 1),
+
+        # display columns
+        "Net": f"{net_arrow} {net:,.{decimals}f}",
+        "%1D": f"{pct_arrow} {pct:,.1f}",
+
+        # helper numeric columns for styling
+        "_net_num": net,
+        "_pct_num": pct,
     }
 
 
@@ -783,12 +824,19 @@ st.markdown(
 top1, top2, top3, top4 = st.columns(4)
 
 with top1:
+    cotton_intraday = latest["CT1"] - prev["CT1"]
+    cotton_intraday_pct = pct_change(latest["CT1"], prev["CT1"])
+    cotton_intraday_arrow = "↑" if cotton_intraday > 0 else "↓" if cotton_intraday < 0 else "→"
+    cotton_intraday_class = "score-bullish" if cotton_intraday > 0 else "score-bearish" if cotton_intraday < 0 else "score-neutral"
+
     st.markdown(
-        """
+        f"""
         <div class="top-card">
-            <div class="top-card-label">Active Contract</div>
-            <div class="top-card-value">CT1 Comdty</div>
-            <div class="top-card-sub">Front Month</div>
+            <div class="top-card-label">Cotton Spot</div>
+            <div class="top-card-value">{latest["CT1"]:.2f}</div>
+            <div class="top-card-sub {cotton_intraday_class}">
+                {cotton_intraday_arrow} {cotton_intraday:+.2f} ({cotton_intraday_pct:+.2f}%)
+            </div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -854,12 +902,60 @@ with top_left:
         unsafe_allow_html=True,
     )
 
+    # --------------------------------------------------------
+    # Softs section
+    # --------------------------------------------------------
+    softs_avg_intensity = softs_indicator_df["Intensity"].mean()
+    softs_avg_bias = "Bullish" if softs_indicator_df["Vs Last Week"].mean() > 0 else "Bearish" if softs_indicator_df["Vs Last Week"].mean() < 0 else "Neutral"
+    softs_avg_class = "score-bullish" if softs_avg_bias == "Bullish" else "score-bearish" if softs_avg_bias == "Bearish" else "score-neutral"
+
+    st.markdown("**Softs**")
+    st.markdown(
+        f"""
+        <div style="margin-bottom:0.45rem;">
+            <span style="color:#9ba8c5; font-size:0.88rem;">Average Softs Intensity:</span>
+            <span class="{softs_avg_class}" style="font-weight:700; margin-left:8px;">{softs_avg_intensity:.0f}</span>
+            <span class="{softs_avg_class}" style="font-weight:700; margin-left:10px;">{softs_avg_bias}</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
     st.dataframe(
-        style_indicator_table(indicator_df),
+        style_indicator_table(softs_indicator_df),
         use_container_width=True,
         hide_index=True,
-        height=385,
+        height=180,
     )
+
+    st.markdown("<div style='height: 18px;'></div>", unsafe_allow_html=True)
+
+    # --------------------------------------------------------
+    # Ags & Oilseeds section
+    # --------------------------------------------------------
+    ags_avg_intensity = ags_indicator_df["Intensity"].mean()
+    ags_avg_bias = "Bullish" if ags_indicator_df["Vs Last Week"].mean() > 0 else "Bearish" if ags_indicator_df["Vs Last Week"].mean() < 0 else "Neutral"
+    ags_avg_class = "score-bullish" if ags_avg_bias == "Bullish" else "score-bearish" if ags_avg_bias == "Bearish" else "score-neutral"
+
+    st.markdown("**Ags & Oilseeds**")
+    st.markdown(
+        f"""
+        <div style="margin-bottom:0.45rem;">
+            <span style="color:#9ba8c5; font-size:0.88rem;">Average Ags Intensity:</span>
+            <span class="{ags_avg_class}" style="font-weight:700; margin-left:8px;">{ags_avg_intensity:.0f}</span>
+            <span class="{ags_avg_class}" style="font-weight:700; margin-left:10px;">{ags_avg_bias}</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.dataframe(
+        style_indicator_table(ags_indicator_df),
+        use_container_width=True,
+        hide_index=True,
+        height=180,
+    )
+
     st.markdown('</div>', unsafe_allow_html=True)
 
 with top_right:
