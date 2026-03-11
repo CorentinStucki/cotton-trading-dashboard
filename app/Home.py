@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 import numpy as np
 import pandas as pd
 import streamlit as st
-
+import streamlit.components.v1 as components
 # ------------------------------------------------------------
 # Import scoring helpers from our local module
 # ------------------------------------------------------------
@@ -45,22 +45,26 @@ st.markdown(
     }
 
     .block-container {
-        max-width: 1500px;
-        padding-top: 1.1rem;
-        padding-bottom: 1.2rem;
+        max-width: 1650px;
+        padding-top: 0.8rem;
+        padding-bottom: 1.8rem;
     }
 
     .dashboard-title {
-        font-size: 2.35rem;
+        font-size: 4.2rem;
         font-weight: 800;
         color: #f4f7ff;
-        margin-bottom: 0.15rem;
+        margin-bottom: 0.2rem;
+        line-height: 1.05;
+        white-space: normal;
+        overflow: visible;
+        word-break: normal;
     }
 
     .dashboard-subtitle {
         color: #98a5c3;
         font-size: 0.95rem;
-        margin-bottom: 0.9rem;
+        margin-bottom: 1.25rem;
     }
 
     .section-title {
@@ -118,10 +122,10 @@ st.markdown(
 
     .table-card {
         border-radius: 16px;
-        padding: 14px 14px 8px 14px;
+        padding: 14px 14px 10px 14px;
         background: linear-gradient(180deg, rgba(21,29,48,0.95), rgba(12,18,34,0.95));
         border: 1px solid rgba(110,130,170,0.18);
-        margin-bottom: 0.75rem;
+        margin-bottom: 1rem;
     }
 
     div[data-testid="stDataFrame"] {
@@ -132,6 +136,12 @@ st.markdown(
 
     hr {
         border-color: rgba(255,255,255,0.10);
+        margin-top: 1.1rem !important;
+        margin-bottom: 1.2rem !important;
+    }
+
+    .header-spacer {
+        height: 18px;
     }
     </style>
     """,
@@ -848,6 +858,7 @@ st.markdown(
     '<div class="dashboard-subtitle">Preview version — simulated market data, structure aligned to final Bloomberg-based architecture.</div>',
     unsafe_allow_html=True,
 )
+st.markdown('<div class="header-spacer"></div>', unsafe_allow_html=True)
 
 # ============================================================
 # TOP SUMMARY CARDS
@@ -907,33 +918,55 @@ with top4:
         """
         <div class="top-card">
             <div class="top-card-label">Last Update</div>
-            <div class="top-card-value">
-                <span id="clock">--:--:--</span>
-            </div>
-            <div class="top-card-sub">Demo mode</div>
+            <div class="top-card-sub" style="margin-bottom: 0.35rem;">Singapore time</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    components.html(
+        """
+        <div style="
+            margin-top:-88px;
+            padding-left:18px;
+            padding-right:18px;
+            font-family: sans-serif;
+            color:#f4f7ff;
+        ">
+            <div id="sg-clock" style="
+                font-size: 1.75rem;
+                font-weight: 800;
+                line-height: 1.1;
+                margin-bottom: 0.30rem;
+            ">--:--:--</div>
+            <div style="
+                color:#c9d2e6;
+                font-size:0.92rem;
+            ">Live clock</div>
         </div>
 
         <script>
-        (function() {
-            function updateClock() {
-                const now = new Date();
-                const time =
-                    String(now.getHours()).padStart(2, "0") + ":" +
-                    String(now.getMinutes()).padStart(2, "0") + ":" +
-                    String(now.getSeconds()).padStart(2, "0");
-
-                const el = window.parent.document.getElementById("clock");
-                if (el) {
-                    el.textContent = time;
-                }
+        function updateSingaporeClock() {
+            const now = new Date();
+            const formatter = new Intl.DateTimeFormat('en-GB', {
+                timeZone: 'Asia/Singapore',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false
+            });
+            const time = formatter.format(now);
+            const el = document.getElementById("sg-clock");
+            if (el) {
+                el.textContent = time;
             }
+        }
 
-            updateClock();
-            setInterval(updateClock, 1000);
-        })();
+        updateSingaporeClock();
+        setInterval(updateSingaporeClock, 1000);
         </script>
         """,
-        unsafe_allow_html=True,
+        height=70,
     )
 
 # ============================================================
@@ -1165,7 +1198,9 @@ with mid_right:
 # OVERVIEW INDICES SECTION
 # ============================================================
 
+st.markdown("<div style='height:18px;'></div>", unsafe_allow_html=True)
 st.divider()
+st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
 
 st.markdown('<div class="table-card">', unsafe_allow_html=True)
 st.markdown('<div class="section-title">Overview Indices</div>', unsafe_allow_html=True)
