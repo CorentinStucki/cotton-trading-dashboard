@@ -369,46 +369,63 @@ else:
 # ============================================================
 # MARKET SNAPSHOT FOR "COTTON #2 INDICATORS"
 # ============================================================
+# Important:
+# - NO ticker column
+# - NO Cotton Front Month
+# - NO spreads
+# - BCOMAG added
+# - Add "Vs Last Day"
+# ============================================================
 
 market_snapshot = {
     "Dollar Index": {
         "last": latest["DXY"],
+        "daily_delta": latest["DXY"] - prev["DXY"],
         "weekly_delta": latest["DXY"] - week_ago["DXY"],
     },
     "Bloomberg Commodity Index": {
         "last": latest["BCOM"],
+        "daily_delta": latest["BCOM"] - prev["BCOM"],
         "weekly_delta": latest["BCOM"] - week_ago["BCOM"],
     },
     "Bloomberg Agri Index": {
         "last": latest["BCOMAG"],
+        "daily_delta": latest["BCOMAG"] - prev["BCOMAG"],
         "weekly_delta": latest["BCOMAG"] - week_ago["BCOMAG"],
     },
     "Crude Oil": {
         "last": latest["CL1"],
+        "daily_delta": latest["CL1"] - prev["CL1"],
         "weekly_delta": latest["CL1"] - week_ago["CL1"],
     },
     "Sugar": {
         "last": latest["SB1"],
+        "daily_delta": latest["SB1"] - prev["SB1"],
         "weekly_delta": latest["SB1"] - week_ago["SB1"],
     },
     "Coffee": {
         "last": latest["KC1"],
+        "daily_delta": latest["KC1"] - prev["KC1"],
         "weekly_delta": latest["KC1"] - week_ago["KC1"],
     },
     "Cocoa": {
         "last": latest["CC1"],
+        "daily_delta": latest["CC1"] - prev["CC1"],
         "weekly_delta": latest["CC1"] - week_ago["CC1"],
     },
     "Corn": {
         "last": latest["C1"],
+        "daily_delta": latest["C1"] - prev["C1"],
         "weekly_delta": latest["C1"] - week_ago["C1"],
     },
     "Soybeans": {
         "last": latest["S1"],
+        "daily_delta": latest["S1"] - prev["S1"],
         "weekly_delta": latest["S1"] - week_ago["S1"],
     },
     "Wheat": {
         "last": latest["W1"],
+        "daily_delta": latest["W1"] - prev["W1"],
         "weekly_delta": latest["W1"] - week_ago["W1"],
     },
 }
@@ -434,6 +451,7 @@ for name, item in market_snapshot.items():
             "Variable": name,
             "Last": round(item["last"], 2),
             "Intensity": intensity,
+            "Vs Last Day": round(item["daily_delta"], 2),
             "Vs Last Week": round(item["weekly_delta"], 2),
             "Bias": direction,
         }
@@ -706,12 +724,13 @@ st.divider()
 # MAIN MARKET MONITOR LAYOUT
 # ============================================================
 
-left_col, right_col = st.columns([0.52, 0.48], gap="large")
+# ------------------------------------------------------------
+# FIRST ROW:
+# Cotton #2 Indicators + Signal Breakdown side by side
+# ------------------------------------------------------------
+top_left, top_right = st.columns([0.62, 0.38], gap="large")
 
-# ------------------------------------------------------------
-# LEFT COLUMN
-# ------------------------------------------------------------
-with left_col:
+with top_left:
     st.markdown('<div class="table-card">', unsafe_allow_html=True)
     st.markdown('<div class="section-title">Cotton #2 Indicators</div>', unsafe_allow_html=True)
     st.markdown(
@@ -727,7 +746,7 @@ with left_col:
     )
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # Signal breakdown
+with top_right:
     breakdown_rows = [
         {
             "Driver": "Cotton Momentum",
@@ -770,15 +789,25 @@ with left_col:
 
     st.markdown('<div class="table-card">', unsafe_allow_html=True)
     st.markdown('<div class="section-title">Signal Breakdown</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-subtitle">How the composite score is built.</div>',
+        unsafe_allow_html=True,
+    )
     st.dataframe(
         breakdown_df,
         use_container_width=True,
         hide_index=True,
-        height=255,
+        height=420,
     )
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # Europe / US commodities
+# ------------------------------------------------------------
+# SECOND ROW:
+# Europe / US Commodities + China Commodities side by side
+# ------------------------------------------------------------
+mid_left, mid_right = st.columns([0.5, 0.5], gap="large")
+
+with mid_left:
     st.markdown('<div class="table-card">', unsafe_allow_html=True)
     st.markdown('<div class="section-title">Europe / US Commodities</div>', unsafe_allow_html=True)
     st.markdown(
@@ -804,10 +833,7 @@ with left_col:
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-# ------------------------------------------------------------
-# RIGHT COLUMN
-# ------------------------------------------------------------
-with right_col:
+with mid_right:
     st.markdown('<div class="table-card">', unsafe_allow_html=True)
     st.markdown('<div class="section-title">China Commodities</div>', unsafe_allow_html=True)
     st.markdown(
@@ -886,9 +912,50 @@ with idx_col3:
 st.markdown('</div>', unsafe_allow_html=True)
 
 # ============================================================
-# FOOTNOTE
+# BOTTOM DRIVER SUMMARY
 # ============================================================
 
-st.caption(
-    "Note: all data shown in this version is simulated. The purpose of this preview is to validate structure, layout and market-monitor logic before connecting the Bloomberg data layer."
+st.divider()
+
+bullish = sorted(
+    [(k, v * weights[k]) for k, v in signals.items()],
+    key=lambda x: x[1],
+    reverse=True,
 )
+bearish = sorted(
+    [(k, v * weights[k]) for k, v in signals.items()],
+    key=lambda x: x[1],
+)
+
+pretty_names = {
+    "cotton_momentum": "Cotton Momentum",
+    "spread_structure": "Spread Structure",
+    "soft_complex": "Soft Complex",
+    "agri_complex": "Agri Complex",
+    "energy": "Energy",
+    "macro": "Macro",
+}
+
+bottom1, bottom2, bottom3 = st.columns(3)
+
+with bottom1:
+    st.markdown('<div class="table-card">', unsafe_allow_html=True)
+    st.markdown('<div class="section-title">Top Bullish Drivers</div>', unsafe_allow_html=True)
+    for k, v in bullish[:3]:
+        st.metric(pretty_names[k], f"{v:+.2f}")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+with bottom2:
+    st.markdown('<div class="table-card">', unsafe_allow_html=True)
+    st.markdown('<div class="section-title">Top Bearish Drivers</div>', unsafe_allow_html=True)
+    for k, v in bearish[:3]:
+        st.metric(pretty_names[k], f"{v:+.2f}")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+with bottom3:
+    st.markdown('<div class="table-card">', unsafe_allow_html=True)
+    st.markdown('<div class="section-title">Market Context</div>', unsafe_allow_html=True)
+    st.metric("Open Interest", f"{int(latest['OPEN_INT']):,}", f"{int(latest['OPEN_INT'] - prev['OPEN_INT']):+d}")
+    st.metric("Volume", f"{int(latest['VOLUME']):,}", f"{int(latest['VOLUME'] - prev['VOLUME']):+d}")
+    st.metric("BCOM", f"{latest['BCOM']:.2f}", f"{pct_change(latest['BCOM'], prev['BCOM']):+.2f}%")
+    st.markdown('</div>', unsafe_allow_html=True)
