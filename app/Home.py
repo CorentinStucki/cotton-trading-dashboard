@@ -872,7 +872,7 @@ with top_left:
         style_indicator_table(indicator_df),
         use_container_width=True,
         hide_index=True,
-        height=420,
+        height=400,
     )
     st.markdown('</div>', unsafe_allow_html=True)
 
