@@ -1198,7 +1198,7 @@ with mid_right:
 # OVERVIEW INDICES SECTION
 # ============================================================
 
-st.markdown("<div style='height:18px;'></div>", unsafe_allow_html=True)
+st.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
 st.divider()
 st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
 
