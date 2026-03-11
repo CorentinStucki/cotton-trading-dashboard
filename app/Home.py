@@ -344,14 +344,23 @@ def style_indicator_table(df: pd.DataFrame):
 def style_signal_table(df: pd.DataFrame):
     """
     Styling for the signal breakdown table
-    More robust: only applies styles to columns that exist.
+    Bloomberg-like:
+    - Driver in orange
+    - Signal / Contribution green if positive, red if negative
+    - Clean numeric formatting
     """
     styler = df.style
 
+    # Driver names in Bloomberg orange
+    if "Driver" in df.columns:
+        styler = styler.applymap(color_ticker, subset=["Driver"])
+
+    # Numeric signal-like columns in green / red
     existing_signal_cols = [c for c in ["Signal", "Contribution"] if c in df.columns]
     if existing_signal_cols:
         styler = styler.applymap(color_pos_neg, subset=existing_signal_cols)
 
+    # Clean display format
     format_dict = {}
     if "Signal" in df.columns:
         format_dict["Signal"] = "{:+.2f}"
@@ -863,7 +872,7 @@ with top_left:
         style_indicator_table(indicator_df),
         use_container_width=True,
         hide_index=True,
-        height=420,
+        height=255,
     )
     st.markdown('</div>', unsafe_allow_html=True)
 
