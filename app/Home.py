@@ -900,35 +900,36 @@ with top3:
     )
 
 with top4:
-    st.markdown(
-        """
-        <div class="top-card">
-            <div class="top-card-label">Last Update</div>
-            <div class="top-card-sub" style="margin-bottom: 0.35rem;">Singapore time</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
     components.html(
         """
         <div style="
-            margin-top:-88px;
-            padding-left:18px;
-            padding-right:18px;
+            border-radius:16px;
+            padding:16px 18px;
+            min-height:108px;
+            background: linear-gradient(180deg, rgba(21,29,48,0.95), rgba(12,18,34,0.95));
+            border: 1px solid rgba(110,130,170,0.18);
             font-family: sans-serif;
             color:#f4f7ff;
+            box-sizing:border-box;
         ">
+            <div style="
+                color:#9ba8c5;
+                font-size:0.84rem;
+                margin-bottom:0.25rem;
+            ">Last Update</div>
+
             <div id="sg-clock" style="
-                font-size: 1.75rem;
-                font-weight: 800;
-                line-height: 1.1;
-                margin-bottom: 0.30rem;
+                color:#f4f7ff;
+                font-size:1.75rem;
+                font-weight:800;
+                line-height:1.1;
+                margin-bottom:0.25rem;
             ">--:--:--</div>
+
             <div style="
                 color:#c9d2e6;
                 font-size:0.92rem;
-            ">Live clock</div>
+            ">Singapore time</div>
         </div>
 
         <script>
@@ -942,7 +943,7 @@ with top4:
                 hour12: false
             });
             const time = formatter.format(now);
-            const el = document.getElementById("sg-clock");
+            const el = document.getElementById('sg-clock');
             if (el) {
                 el.textContent = time;
             }
@@ -952,7 +953,7 @@ with top4:
         setInterval(updateSingaporeClock, 1000);
         </script>
         """,
-        height=70,
+        height=120,
     )
 
 # ============================================================
