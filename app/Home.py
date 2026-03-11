@@ -925,7 +925,7 @@ with top_left:
         style_indicator_table(softs_indicator_df),
         use_container_width=True,
         hide_index=True,
-        height=180,
+        height=140,
     )
 
     st.markdown("<div style='height: 18px;'></div>", unsafe_allow_html=True)
@@ -953,7 +953,7 @@ with top_left:
         style_indicator_table(ags_indicator_df),
         use_container_width=True,
         hide_index=True,
-        height=180,
+        height=140,
     )
 
     st.markdown('</div>', unsafe_allow_html=True)
