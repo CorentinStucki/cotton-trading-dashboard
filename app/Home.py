@@ -295,6 +295,47 @@ def style_market_table_int(df: pd.DataFrame):
         )
     )
 
+# ------------------------------------------------------------
+# STYLE FOR INDICATOR TABLES
+# ------------------------------------------------------------
+def style_indicator_table(df: pd.DataFrame):
+    """
+    Styling for Cotton #2 Indicators
+    """
+    return (
+        df.style
+        .applymap(color_pos_neg, subset=["Vs Last Day", "Vs Last Week"])
+        .applymap(color_pos_neg, subset=["Bias"])
+        .format(
+            {
+                "Last": "{:,.2f}",
+                "Intensity": "{:,.0f}",
+                "Vs Last Day": "{:,.2f}",
+                "Vs Last Week": "{:,.2f}",
+            }
+        )
+    )
+
+# ------------------------------------------------------------
+# STYLE FOR SIGNAL BREAKDOWN
+# ------------------------------------------------------------
+def style_signal_table(df: pd.DataFrame):
+    """
+    Styling for the signal breakdown table
+    """
+    return (
+        df.style
+        .applymap(color_pos_neg, subset=["Signal", "Contribution"])
+        .format(
+            {
+                "Signal": "{:+.2f}",
+                "Contribution": "{:+.2f}",
+                "Weight": "{:.2f}",
+            }
+        )
+    )
+
+
 # ============================================================
 # BUILD THE CORE SIMULATED DATASET
 # ============================================================
@@ -789,7 +830,7 @@ with top_left:
     )
 
     st.dataframe(
-        indicator_df,
+        style_indicator_table(indicator_df),
         use_container_width=True,
         hide_index=True,
         height=420,
@@ -844,7 +885,7 @@ with top_right:
         unsafe_allow_html=True,
     )
     st.dataframe(
-        breakdown_df,
+        style_indicator_table(breakdown_df),
         use_container_width=True,
         hide_index=True,
         height=420,
