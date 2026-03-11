@@ -1,86 +1,157 @@
+# ============================================================
+# app/Home.py
+# Cotton dashboard - simulated preview version
+# ============================================================
+
+# ------------------------------------------------------------
+# Make sure the project root is visible to Python when
+# Streamlit Cloud runs app/Home.py from inside the "app" folder
+# ------------------------------------------------------------
 import sys
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
-import math
+# ------------------------------------------------------------
+# Standard imports
+# ------------------------------------------------------------
 from datetime import datetime, timedelta, timezone
 
 import numpy as np
 import pandas as pd
-import plotly.graph_objects as go
 import streamlit as st
 
+# ------------------------------------------------------------
+# Import scoring helpers from our local module
+# ------------------------------------------------------------
 from data.scoring import (
     classify_score,
     normalize_change_to_signal,
     weighted_composite_score,
 )
 
+# ============================================================
+# STREAMLIT PAGE CONFIG
+# ============================================================
 st.set_page_config(
     page_title="Cotton Trading Dashboard",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
 
-# ---------- Styling ----------
+# ============================================================
+# STYLING
+# ============================================================
 st.markdown(
     """
     <style>
     .main {
         background-color: #0b1020;
     }
+
     .block-container {
-        padding-top: 1.2rem;
+        max-width: 1500px;
+        padding-top: 1.1rem;
         padding-bottom: 1.2rem;
-        max-width: 1450px;
     }
-    div[data-testid="stMetric"] {
-        background: linear-gradient(180deg, rgba(21,29,48,0.95), rgba(12,18,34,0.95));
-        border: 1px solid rgba(110,130,170,0.18);
-        border-radius: 16px;
-        padding: 14px 16px;
+
+    .dashboard-title {
+        font-size: 2.35rem;
+        font-weight: 800;
+        color: #f4f7ff;
+        margin-bottom: 0.15rem;
     }
-    .panel-title {
-        font-size: 1.1rem;
+
+    .dashboard-subtitle {
+        color: #98a5c3;
+        font-size: 0.95rem;
+        margin-bottom: 0.9rem;
+    }
+
+    .section-title {
+        font-size: 1.08rem;
         font-weight: 700;
         color: #f2f5ff;
-        margin-bottom: 0.5rem;
+        margin-top: 0.35rem;
+        margin-bottom: 0.45rem;
     }
-    .small-muted {
-        color: #98a5c3;
-        font-size: 0.9rem;
+
+    .section-subtitle {
+        color: #99a7c2;
+        font-size: 0.88rem;
+        margin-bottom: 0.55rem;
     }
-    .signal-box {
-        border-radius: 18px;
-        padding: 18px 20px;
+
+    .top-card {
+        border-radius: 16px;
+        padding: 16px 18px;
         background: linear-gradient(180deg, rgba(21,29,48,0.95), rgba(12,18,34,0.95));
         border: 1px solid rgba(110,130,170,0.18);
-        margin-bottom: 12px;
+        min-height: 108px;
     }
-    .signal-label {
-        font-size: 0.9rem;
-        color: #98a5c3;
-        margin-bottom: 4px;
+
+    .top-card-label {
+        color: #9ba8c5;
+        font-size: 0.84rem;
+        margin-bottom: 0.25rem;
     }
-    .signal-value {
-        font-size: 2rem;
+
+    .top-card-value {
+        color: #f4f7ff;
+        font-size: 1.75rem;
         font-weight: 800;
-        color: #f2f5ff;
-        margin-bottom: 4px;
+        line-height: 1.1;
+        margin-bottom: 0.25rem;
     }
-    .signal-sub {
-        font-size: 0.95rem;
-        color: #c5cde0;
+
+    .top-card-sub {
+        color: #c9d2e6;
+        font-size: 0.92rem;
+    }
+
+    .score-bullish {
+        color: #59d98e !important;
+    }
+
+    .score-bearish {
+        color: #ff6b6b !important;
+    }
+
+    .score-neutral {
+        color: #f1c75b !important;
+    }
+
+    .table-card {
+        border-radius: 16px;
+        padding: 14px 14px 8px 14px;
+        background: linear-gradient(180deg, rgba(21,29,48,0.95), rgba(12,18,34,0.95));
+        border: 1px solid rgba(110,130,170,0.18);
+        margin-bottom: 0.75rem;
+    }
+
+    div[data-testid="stDataFrame"] {
+        border: 1px solid rgba(110,130,170,0.10);
+        border-radius: 12px;
+        overflow: hidden;
+    }
+
+    hr {
+        border-color: rgba(255,255,255,0.10);
     }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
-# ---------- Helpers ----------
+# ============================================================
+# HELPER FUNCTIONS
+# ============================================================
+
 def seeded_rng() -> np.random.Generator:
-    # stable enough within a minute, changes over time for demo realism
+    """
+    Create a deterministic random generator that changes with time,
+    so the demo data feels alive but remains stable enough per refresh.
+    """
     seed = int(datetime.now().strftime("%Y%m%d%H%M"))
     return np.random.default_rng(seed)
 
@@ -92,6 +163,10 @@ def make_series(
     vol: float,
     rng: np.random.Generator,
 ) -> np.ndarray:
+    """
+    Creates a simple mock time series using a noisy random walk.
+    Good enough for a realistic prototype.
+    """
     values = [start]
     for _ in range(n - 1):
         step = drift + rng.normal(0, vol)
@@ -100,109 +175,106 @@ def make_series(
 
 
 def make_time_index(n: int, freq_minutes: int = 60) -> pd.DatetimeIndex:
+    """
+    Creates a UTC datetime index.
+    """
     end = datetime.now(timezone.utc).replace(second=0, microsecond=0)
     start = end - timedelta(minutes=freq_minutes * (n - 1))
     return pd.date_range(start=start, periods=n, freq=f"{freq_minutes}min")
 
 
+def pct_change(current: float, previous: float) -> float:
+    """
+    Standard percentage change helper.
+    """
+    if previous == 0:
+        return 0.0
+    return ((current - previous) / previous) * 100.0
+
+
+def signed_arrow(value: float) -> str:
+    """
+    Arrow helper for directional labels.
+    """
+    if value > 0:
+        return "↑"
+    if value < 0:
+        return "↓"
+    return "→"
+
+
+def bias_label(value: float) -> str:
+    """
+    Basic directional label.
+    """
+    if value > 0:
+        return "Bullish"
+    if value < 0:
+        return "Bearish"
+    return "Neutral"
+
+
 def score_to_intensity(score: float) -> float:
-    # map [-3, +3] -> [0, 100]
+    """
+    Maps a score from [-3, +3] into [0, 100].
+    """
     clipped = max(-3.0, min(3.0, score))
     return round(((clipped + 3.0) / 6.0) * 100.0, 1)
 
 
-def sparkline_figure(values: pd.Series, line_color: str = "#7ad7f0") -> go.Figure:
-    fig = go.Figure()
-    fig.add_trace(
-        go.Scatter(
-            x=list(range(len(values))),
-            y=values,
-            mode="lines",
-            line=dict(color=line_color, width=2),
-            hoverinfo="skip",
-        )
-    )
-    fig.update_layout(
-        margin=dict(l=0, r=0, t=0, b=0),
-        height=46,
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        xaxis=dict(visible=False),
-        yaxis=dict(visible=False),
-        showlegend=False,
-    )
-    return fig
+def format_last(value: float, decimals: int = 2) -> str:
+    """
+    Clean numeric formatting.
+    """
+    return f"{value:,.{decimals}f}"
 
 
-def styled_line_chart(
-    x,
-    y,
-    title: str,
-    line_color: str = "#7ad7f0",
-    fill: bool = False,
-) -> go.Figure:
-    fig = go.Figure()
-    fig.add_trace(
-        go.Scatter(
-            x=x,
-            y=y,
-            mode="lines",
-            line=dict(color=line_color, width=2.5),
-            fill="tozeroy" if fill else None,
-            fillcolor="rgba(122,215,240,0.10)" if fill else None,
-            name=title,
-        )
-    )
-    fig.update_layout(
-        title=dict(text=title, x=0.01, xanchor="left", font=dict(size=16, color="#f2f5ff")),
-        height=290,
-        margin=dict(l=30, r=18, t=48, b=30),
-        paper_bgcolor="#12192b",
-        plot_bgcolor="#12192b",
-        font=dict(color="#dfe6f5"),
-        xaxis=dict(
-            showgrid=False,
-            zeroline=False,
-            tickfont=dict(color="#9fb0d1"),
-        ),
-        yaxis=dict(
-            showgrid=True,
-            gridcolor="rgba(255,255,255,0.08)",
-            zeroline=False,
-            tickfont=dict(color="#9fb0d1"),
-        ),
-        showlegend=False,
-    )
-    return fig
+def build_quote_rows(raw_rows: list[dict]) -> pd.DataFrame:
+    """
+    Creates a standard market monitor table with:
+    Ticker / Last Price / Net / %1D
+    """
+    df = pd.DataFrame(raw_rows)
+    return df[["Ticker", "Last Price", "Net", "%1D"]]
 
 
-# ---------- Mock market data ----------
+# ============================================================
+# BUILD THE CORE SIMULATED DATASET
+# ============================================================
+
 @st.cache_data(ttl=120, show_spinner=False)
-def build_demo_dataset():
+def build_demo_core_dataset():
     rng = seeded_rng()
     idx = make_time_index(72, freq_minutes=60)
 
+    # Core cotton / macro / commodity series used by the model
     cotton = make_series(67.2, len(idx), drift=0.03, vol=0.45, rng=rng)
     dxy = make_series(103.8, len(idx), drift=-0.005, vol=0.08, rng=rng)
-    bcom = make_series(126.0, len(idx), drift=0.01, vol=0.18, rng=rng)
-    oil = make_series(77.5, len(idx), drift=0.01, vol=0.55, rng=rng)
-    sugar = make_series(21.8, len(idx), drift=0.005, vol=0.08, rng=rng)
-    coffee = make_series(188.0, len(idx), drift=0.02, vol=0.9, rng=rng)
-    cocoa = make_series(9480, len(idx), drift=1.5, vol=90, rng=rng)
-    corn = make_series(438, len(idx), drift=0.03, vol=1.9, rng=rng)
-    soy = make_series(1160, len(idx), drift=0.08, vol=3.2, rng=rng)
-    wheat = make_series(579, len(idx), drift=0.04, vol=2.3, rng=rng)
+    bcom = make_series(135.0, len(idx), drift=0.02, vol=0.18, rng=rng)
+    bcomag = make_series(57.0, len(idx), drift=0.01, vol=0.08, rng=rng)
+    oil = make_series(100.0, len(idx), drift=0.01, vol=0.55, rng=rng)
 
+    sugar = make_series(15.2, len(idx), drift=0.01, vol=0.10, rng=rng)
+    coffee = make_series(300.0, len(idx), drift=0.03, vol=1.0, rng=rng)
+    cocoa = make_series(3138.0, len(idx), drift=2.0, vol=45.0, rng=rng)
+
+    corn = make_series(451.0, len(idx), drift=0.04, vol=1.8, rng=rng)
+    soy = make_series(1200.0, len(idx), drift=0.07, vol=3.0, rng=rng)
+    wheat = make_series(630.0, len(idx), drift=0.05, vol=2.0, rng=rng)
+
+    # Kept internally for score logic
     may_jul = make_series(-0.65, len(idx), drift=0.005, vol=0.06, rng=rng)
     jul_dec = make_series(1.15, len(idx), drift=-0.003, vol=0.07, rng=rng)
-    oi = make_series(99277, len(idx), drift=8, vol=120, rng=rng)
-    vol = np.abs(make_series(23000, len(idx), drift=25, vol=1800, rng=rng))
+
+    open_int = make_series(99277, len(idx), drift=8, vol=140, rng=rng)
+    volume = np.abs(make_series(23000, len(idx), drift=20, vol=1800, rng=rng))
 
     df = pd.DataFrame(
         {
             "CT1": cotton,
             "DXY": dxy,
             "BCOM": bcom,
+            "BCOMAG": bcomag,
             "CL1": oil,
             "SB1": sugar,
             "KC1": coffee,
@@ -212,8 +284,8 @@ def build_demo_dataset():
             "W1": wheat,
             "MAY_JUL": may_jul,
             "JUL_DEC": jul_dec,
-            "OPEN_INT": oi,
-            "VOLUME": vol,
+            "OPEN_INT": open_int,
+            "VOLUME": volume,
         },
         index=idx,
     )
@@ -221,131 +293,58 @@ def build_demo_dataset():
     return df
 
 
-df = build_demo_dataset()
+df = build_demo_core_dataset()
 
-# ---------- Compute current state ----------
 latest = df.iloc[-1]
 prev = df.iloc[-2]
 week_ago = df.iloc[-6] if len(df) >= 6 else df.iloc[0]
 
-def pct_change(a, b):
-    if b == 0:
-        return 0.0
-    return ((a - b) / b) * 100.0
+# ============================================================
+# COMPOSITE SCORE LOGIC
+# ============================================================
 
-market_snapshot = {
-    "Cotton Front Month": {
-        "symbol": "CT1 Comdty",
-        "last": latest["CT1"],
-        "chg_pct": pct_change(latest["CT1"], prev["CT1"]),
-        "weekly_delta": latest["CT1"] - week_ago["CT1"],
-        "series": df["CT1"].tail(24),
-    },
-    "Dollar Index": {
-        "symbol": "DXY Index",
-        "last": latest["DXY"],
-        "chg_pct": pct_change(latest["DXY"], prev["DXY"]),
-        "weekly_delta": latest["DXY"] - week_ago["DXY"],
-        "series": df["DXY"].tail(24),
-    },
-    "Bloomberg Commodity Index": {
-        "symbol": "BCOM Index",
-        "last": latest["BCOM"],
-        "chg_pct": pct_change(latest["BCOM"], prev["BCOM"]),
-        "weekly_delta": latest["BCOM"] - week_ago["BCOM"],
-        "series": df["BCOM"].tail(24),
-    },
-    "Crude Oil": {
-        "symbol": "CL1 Comdty",
-        "last": latest["CL1"],
-        "chg_pct": pct_change(latest["CL1"], prev["CL1"]),
-        "weekly_delta": latest["CL1"] - week_ago["CL1"],
-        "series": df["CL1"].tail(24),
-    },
-    "Sugar": {
-        "symbol": "SB1 Comdty",
-        "last": latest["SB1"],
-        "chg_pct": pct_change(latest["SB1"], prev["SB1"]),
-        "weekly_delta": latest["SB1"] - week_ago["SB1"],
-        "series": df["SB1"].tail(24),
-    },
-    "Coffee": {
-        "symbol": "KC1 Comdty",
-        "last": latest["KC1"],
-        "chg_pct": pct_change(latest["KC1"], prev["KC1"]),
-        "weekly_delta": latest["KC1"] - week_ago["KC1"],
-        "series": df["KC1"].tail(24),
-    },
-    "Cocoa": {
-        "symbol": "CC1 Comdty",
-        "last": latest["CC1"],
-        "chg_pct": pct_change(latest["CC1"], prev["CC1"]),
-        "weekly_delta": latest["CC1"] - week_ago["CC1"],
-        "series": df["CC1"].tail(24),
-    },
-    "Corn": {
-        "symbol": "C1 Comdty",
-        "last": latest["C1"],
-        "chg_pct": pct_change(latest["C1"], prev["C1"]),
-        "weekly_delta": latest["C1"] - week_ago["C1"],
-        "series": df["C1"].tail(24),
-    },
-    "Soybeans": {
-        "symbol": "S1 Comdty",
-        "last": latest["S1"],
-        "chg_pct": pct_change(latest["S1"], prev["S1"]),
-        "weekly_delta": latest["S1"] - week_ago["S1"],
-        "series": df["S1"].tail(24),
-    },
-    "Wheat": {
-        "symbol": "W1 Comdty",
-        "last": latest["W1"],
-        "chg_pct": pct_change(latest["W1"], prev["W1"]),
-        "weekly_delta": latest["W1"] - week_ago["W1"],
-        "series": df["W1"].tail(24),
-    },
-    "May/Jul Spread": {
-        "symbol": "CTK/CTN",
-        "last": latest["MAY_JUL"],
-        "chg_pct": pct_change(latest["MAY_JUL"], prev["MAY_JUL"]) if prev["MAY_JUL"] != 0 else 0.0,
-        "weekly_delta": latest["MAY_JUL"] - week_ago["MAY_JUL"],
-        "series": df["MAY_JUL"].tail(24),
-    },
-    "Jul/Dec Spread": {
-        "symbol": "CTN/CTZ",
-        "last": latest["JUL_DEC"],
-        "chg_pct": pct_change(latest["JUL_DEC"], prev["JUL_DEC"]) if prev["JUL_DEC"] != 0 else 0.0,
-        "weekly_delta": latest["JUL_DEC"] - week_ago["JUL_DEC"],
-        "series": df["JUL_DEC"].tail(24),
-    },
-}
-
-# ---------- Signals ----------
 signals = {
-    "cotton_momentum": normalize_change_to_signal(pct_change(latest["CT1"], df["CT1"].iloc[-6]), scale=1.8),
-    "spread_structure": normalize_change_to_signal((latest["MAY_JUL"] * -12.0), scale=1.0),
-    "soft_complex": np.mean([
-        normalize_change_to_signal(pct_change(latest["SB1"], df["SB1"].iloc[-6]), scale=2.2),
-        normalize_change_to_signal(pct_change(latest["KC1"], df["KC1"].iloc[-6]), scale=2.2),
-        normalize_change_to_signal(pct_change(latest["CC1"], df["CC1"].iloc[-6]), scale=2.2),
-    ]),
-    "agri_complex": np.mean([
-        normalize_change_to_signal(pct_change(latest["C1"], df["C1"].iloc[-6]), scale=2.0),
-        normalize_change_to_signal(pct_change(latest["S1"], df["S1"].iloc[-6]), scale=2.0),
-        normalize_change_to_signal(pct_change(latest["W1"], df["W1"].iloc[-6]), scale=2.0),
-    ]),
-    "energy": normalize_change_to_signal(pct_change(latest["CL1"], df["CL1"].iloc[-6]), scale=2.0),
-    "macro": np.mean([
-        -normalize_change_to_signal(pct_change(latest["DXY"], df["DXY"].iloc[-6]), scale=0.8),
-        normalize_change_to_signal(pct_change(latest["BCOM"], df["BCOM"].iloc[-6]), scale=1.5),
-    ]),
+    "cotton_momentum": normalize_change_to_signal(
+        pct_change(latest["CT1"], df["CT1"].iloc[-6]),
+        scale=1.8,
+    ),
+    "spread_structure": normalize_change_to_signal(
+        latest["MAY_JUL"] * -12.0,
+        scale=1.0,
+    ),
+    "soft_complex": np.mean(
+        [
+            normalize_change_to_signal(pct_change(latest["SB1"], df["SB1"].iloc[-6]), scale=2.2),
+            normalize_change_to_signal(pct_change(latest["KC1"], df["KC1"].iloc[-6]), scale=2.2),
+            normalize_change_to_signal(pct_change(latest["CC1"], df["CC1"].iloc[-6]), scale=2.2),
+        ]
+    ),
+    "agri_complex": np.mean(
+        [
+            normalize_change_to_signal(pct_change(latest["C1"], df["C1"].iloc[-6]), scale=2.0),
+            normalize_change_to_signal(pct_change(latest["S1"], df["S1"].iloc[-6]), scale=2.0),
+            normalize_change_to_signal(pct_change(latest["W1"], df["W1"].iloc[-6]), scale=2.0),
+        ]
+    ),
+    "energy": normalize_change_to_signal(
+        pct_change(latest["CL1"], df["CL1"].iloc[-6]),
+        scale=2.0,
+    ),
+    "macro": np.mean(
+        [
+            # Rising DXY is bearish for cotton
+            -normalize_change_to_signal(pct_change(latest["DXY"], df["DXY"].iloc[-6]), scale=0.8),
+            normalize_change_to_signal(pct_change(latest["BCOM"], df["BCOM"].iloc[-6]), scale=1.5),
+            normalize_change_to_signal(pct_change(latest["BCOMAG"], df["BCOMAG"].iloc[-6]), scale=1.2),
+        ]
+    ),
 }
 
 weights = {
-    "cotton_momentum": 0.30,
-    "spread_structure": 0.22,
-    "soft_complex": 0.14,
-    "agri_complex": 0.12,
+    "cotton_momentum": 0.28,
+    "spread_structure": 0.20,
+    "soft_complex": 0.16,
+    "agri_complex": 0.14,
     "energy": 0.12,
     "macro": 0.10,
 }
@@ -353,144 +352,543 @@ weights = {
 composite_score = weighted_composite_score(signals, weights)
 signal_label = classify_score(composite_score)
 
-# ---------- Header ----------
-st.title("Cotton Trading Dashboard")
-st.caption("Preview version — simulated market data, production structure, 120s refresh target.")
+# ============================================================
+# COMPOSITE SCORE VISUAL DIRECTION / COLOR
+# ============================================================
 
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("Active Contract", "CT1 Comdty", "Front Month")
-c2.metric("Composite Score", f"{composite_score:+.2f}", signal_label)
-c3.metric("Cotton Front Month", f"{latest['CT1']:.2f} c/lb", f"{pct_change(latest['CT1'], prev['CT1']):+.2f}%")
-c4.metric("Last Update", datetime.now().strftime("%H:%M:%S"), "Demo mode")
+if composite_score > 0:
+    score_css_class = "score-bullish"
+    score_direction = "↑ Bullish"
+elif composite_score < 0:
+    score_css_class = "score-bearish"
+    score_direction = "↓ Bearish"
+else:
+    score_css_class = "score-neutral"
+    score_direction = "→ Neutral"
 
-st.divider()
+# ============================================================
+# MARKET SNAPSHOT FOR "COTTON #2 INDICATORS"
+# ============================================================
 
-# ---------- Main layout ----------
-left, right = st.columns([0.44, 0.56], gap="large")
+market_snapshot = {
+    "Dollar Index": {
+        "last": latest["DXY"],
+        "weekly_delta": latest["DXY"] - week_ago["DXY"],
+    },
+    "Bloomberg Commodity Index": {
+        "last": latest["BCOM"],
+        "weekly_delta": latest["BCOM"] - week_ago["BCOM"],
+    },
+    "Bloomberg Agri Index": {
+        "last": latest["BCOMAG"],
+        "weekly_delta": latest["BCOMAG"] - week_ago["BCOMAG"],
+    },
+    "Crude Oil": {
+        "last": latest["CL1"],
+        "weekly_delta": latest["CL1"] - week_ago["CL1"],
+    },
+    "Sugar": {
+        "last": latest["SB1"],
+        "weekly_delta": latest["SB1"] - week_ago["SB1"],
+    },
+    "Coffee": {
+        "last": latest["KC1"],
+        "weekly_delta": latest["KC1"] - week_ago["KC1"],
+    },
+    "Cocoa": {
+        "last": latest["CC1"],
+        "weekly_delta": latest["CC1"] - week_ago["CC1"],
+    },
+    "Corn": {
+        "last": latest["C1"],
+        "weekly_delta": latest["C1"] - week_ago["C1"],
+    },
+    "Soybeans": {
+        "last": latest["S1"],
+        "weekly_delta": latest["S1"] - week_ago["S1"],
+    },
+    "Wheat": {
+        "last": latest["W1"],
+        "weekly_delta": latest["W1"] - week_ago["W1"],
+    },
+}
 
-with left:
-    st.markdown('<div class="panel-title">Cotton #2 Indicators</div>', unsafe_allow_html=True)
-    st.caption("Prototype scoring table built around cotton, spreads, softs, agriculture, energy and macro drivers.")
+indicator_rows = []
 
-    rows = []
-    for name, item in market_snapshot.items():
-        direction = "Bullish" if item["weekly_delta"] > 0 else "Bearish" if item["weekly_delta"] < 0 else "Neutral"
-        # for DXY, rising is bearish cotton
-        if name == "Dollar Index":
-            direction = "Bearish" if item["weekly_delta"] > 0 else "Bullish" if item["weekly_delta"] < 0 else "Neutral"
+for name, item in market_snapshot.items():
+    direction = "Bullish" if item["weekly_delta"] > 0 else "Bearish" if item["weekly_delta"] < 0 else "Neutral"
 
-        proxy_score = score_to_intensity(
-            normalize_change_to_signal(item["weekly_delta"], scale=max(abs(item["last"]) * 0.01, 0.5))
+    # Special rule: rising DXY is bearish for cotton
+    if name == "Dollar Index":
+        direction = "Bearish" if item["weekly_delta"] > 0 else "Bullish" if item["weekly_delta"] < 0 else "Neutral"
+
+    intensity = score_to_intensity(
+        normalize_change_to_signal(
+            item["weekly_delta"],
+            scale=max(abs(item["last"]) * 0.01, 0.5),
         )
-        rows.append(
-            {
-                "Variable": name,
-                "Ticker": item["symbol"],
-                "Last": round(item["last"], 2),
-                "Intensity": proxy_score,
-                "Vs Last Week": round(item["weekly_delta"], 2),
-                "Bias": direction,
-            }
-        )
-
-    indicator_df = pd.DataFrame(rows).sort_values("Intensity", ascending=False)
-    st.dataframe(indicator_df, use_container_width=True, height=470)
-
-    st.markdown('<div class="panel-title" style="margin-top:0.8rem;">Driver Breakdown</div>', unsafe_allow_html=True)
-
-    driver_df = pd.DataFrame(
-        [
-            {"Driver": "Cotton Momentum", "Signal": signals["cotton_momentum"], "Weight": weights["cotton_momentum"]},
-            {"Driver": "Spread Structure", "Signal": signals["spread_structure"], "Weight": weights["spread_structure"]},
-            {"Driver": "Soft Complex", "Signal": signals["soft_complex"], "Weight": weights["soft_complex"]},
-            {"Driver": "Agri Complex", "Signal": signals["agri_complex"], "Weight": weights["agri_complex"]},
-            {"Driver": "Energy", "Signal": signals["energy"], "Weight": weights["energy"]},
-            {"Driver": "Macro", "Signal": signals["macro"], "Weight": weights["macro"]},
-        ]
     )
-    driver_df["Contribution"] = driver_df["Signal"] * driver_df["Weight"]
-    driver_df["Contribution"] = driver_df["Contribution"].round(2)
-    driver_df["Signal"] = driver_df["Signal"].round(2)
-    driver_df["Weight"] = driver_df["Weight"].round(2)
 
-    st.dataframe(driver_df, use_container_width=True, hide_index=True)
+    indicator_rows.append(
+        {
+            "Variable": name,
+            "Last": round(item["last"], 2),
+            "Intensity": intensity,
+            "Vs Last Week": round(item["weekly_delta"], 2),
+            "Bias": direction,
+        }
+    )
 
-with right:
+indicator_df = pd.DataFrame(indicator_rows).sort_values("Intensity", ascending=False)
+
+# ============================================================
+# HELPERS FOR MARKET MONITOR TABLES
+# ============================================================
+
+def make_quote(ticker: str, last: float, prev_value: float | None = None, decimals: int = 1) -> dict:
+    """
+    Standard quote row used in all Bloomberg-style monitor tables.
+    """
+    if prev_value is None:
+        prev_value = last * 0.99
+
+    net = last - prev_value
+    pct = pct_change(last, prev_value)
+
+    return {
+        "Ticker": ticker,
+        "Last Price": round(last, decimals),
+        "Net": round(net, decimals),
+        "%1D": round(pct, 1),
+    }
+
+
+def simulated_quote_from_base(
+    rng: np.random.Generator,
+    ticker: str,
+    base: float,
+    pct_vol: float = 1.8,
+    decimals: int = 1,
+) -> dict:
+    """
+    Creates a simulated quote around a base value.
+    """
+    prev_val = base * (1 + rng.normal(0, pct_vol / 100))
+    last_val = base * (1 + rng.normal(0, pct_vol / 100))
+    return make_quote(ticker, last_val, prev_val, decimals=decimals)
+
+
+@st.cache_data(ttl=120, show_spinner=False)
+def build_market_monitor_tables():
+    """
+    Creates Bloomberg-style monitor tables using simulated but coherent data.
+    We reuse some values from the core dataset where relevant.
+    """
+    rng = seeded_rng()
+
+    # --------------------------------------------------------
+    # EUROPE / US - broad commodity block
+    # --------------------------------------------------------
+    broad_rows = [
+        make_quote("BCOM", latest["BCOM"], prev["BCOM"], decimals=0),
+        make_quote("BCOMAG", latest["BCOMAG"], prev["BCOMAG"], decimals=0),
+        simulated_quote_from_base(rng, "XBTUSD", 68787, pct_vol=2.5, decimals=0),
+    ]
+
+    # --------------------------------------------------------
+    # EUROPE / US - energy
+    # --------------------------------------------------------
+    energy_rows = [
+        make_quote("CL1", latest["CL1"], prev["CL1"], decimals=0),
+        simulated_quote_from_base(rng, "CO1", 102, pct_vol=2.0, decimals=0),
+        simulated_quote_from_base(rng, "XB1", 294, pct_vol=2.2, decimals=0),
+        simulated_quote_from_base(rng, "HO1", 390, pct_vol=2.0, decimals=0),
+        simulated_quote_from_base(rng, "QS1", 1233, pct_vol=1.5, decimals=0),
+        simulated_quote_from_base(rng, "NG1", 3.0, pct_vol=3.0, decimals=1),
+        simulated_quote_from_base(rng, "FN1", 153, pct_vol=2.5, decimals=0),
+        simulated_quote_from_base(rng, "TZT1", 160, pct_vol=2.5, decimals=0),
+    ]
+
+    # --------------------------------------------------------
+    # EUROPE / US - metals
+    # --------------------------------------------------------
+    metals_rows = [
+        simulated_quote_from_base(rng, "XAU", 5102, pct_vol=1.5, decimals=0),
+        simulated_quote_from_base(rng, "XAG", 85, pct_vol=1.7, decimals=0),
+        simulated_quote_from_base(rng, "LMAHDS03", 3446, pct_vol=1.8, decimals=0),
+        simulated_quote_from_base(rng, "LMCADS03", 12862, pct_vol=1.6, decimals=0),
+        simulated_quote_from_base(rng, "LMZSDS03", 3298, pct_vol=1.6, decimals=0),
+        simulated_quote_from_base(rng, "LMNIDS03", 17469, pct_vol=1.7, decimals=0),
+        simulated_quote_from_base(rng, "LMPBDS03", 1953, pct_vol=1.4, decimals=0),
+        simulated_quote_from_base(rng, "LMSNDS03", 50065, pct_vol=1.3, decimals=0),
+        simulated_quote_from_base(rng, "RBT1", 3115, pct_vol=1.9, decimals=0),
+        simulated_quote_from_base(rng, "IOE1", 816, pct_vol=1.7, decimals=0),
+        simulated_quote_from_base(rng, "SC01", 103, pct_vol=1.5, decimals=0),
+        simulated_quote_from_base(rng, "HG1", 569, pct_vol=1.8, decimals=0),
+    ]
+
+    # --------------------------------------------------------
+    # EUROPE / US - agriculture / softs
+    # --------------------------------------------------------
+    ag_rows = [
+        make_quote("W1", latest["W1"], prev["W1"], decimals=0),
+        make_quote("C1", latest["C1"], prev["C1"], decimals=0),
+        make_quote("S1", latest["S1"], prev["S1"], decimals=0),
+        make_quote("SB1", latest["SB1"], prev["SB1"], decimals=1),
+        make_quote("CC1", latest["CC1"], prev["CC1"], decimals=0),
+        simulated_quote_from_base(rng, "KO1", 4454, pct_vol=1.4, decimals=0),
+        simulated_quote_from_base(rng, "LC1", 235, pct_vol=1.4, decimals=0),
+        make_quote("KC1", latest["KC1"], prev["KC1"], decimals=0),
+        make_quote("CT1", latest["CT1"], prev["CT1"], decimals=0),
+    ]
+
+    # --------------------------------------------------------
+    # CHINA commodities
+    # --------------------------------------------------------
+    china_energy_rows = [
+        simulated_quote_from_base(rng, "SCP1", 796, pct_vol=2.0, decimals=0),
+        simulated_quote_from_base(rng, "F01", 4790, pct_vol=2.0, decimals=0),
+        simulated_quote_from_base(rng, "SLS1", 5384, pct_vol=2.0, decimals=0),
+    ]
+
+    china_metals_rows = [
+        simulated_quote_from_base(rng, "IOE1", 816, pct_vol=1.8, decimals=0),
+        simulated_quote_from_base(rng, "RBT1", 3115, pct_vol=1.8, decimals=0),
+        simulated_quote_from_base(rng, "ROC1", 3249, pct_vol=1.7, decimals=0),
+        simulated_quote_from_base(rng, "SAI1", 21915, pct_vol=1.5, decimals=0),
+        simulated_quote_from_base(rng, "AUA1", 1139, pct_vol=1.5, decimals=0),
+        simulated_quote_from_base(rng, "CU1", 199990, pct_vol=1.3, decimals=0),
+        simulated_quote_from_base(rng, "AA1", 24560, pct_vol=1.4, decimals=0),
+        simulated_quote_from_base(rng, "ZNA1", 24355, pct_vol=1.5, decimals=0),
+        simulated_quote_from_base(rng, "XI1", 137410, pct_vol=1.4, decimals=0),
+        simulated_quote_from_base(rng, "PBL1", 16640, pct_vol=1.5, decimals=0),
+        simulated_quote_from_base(rng, "X001", 385750, pct_vol=1.4, decimals=0),
+    ]
+
+    china_ag_rows = [
+        simulated_quote_from_base(rng, "V1", 15575, pct_vol=1.6, decimals=0),
+        simulated_quote_from_base(rng, "V001", 3122, pct_vol=1.6, decimals=0),
+        simulated_quote_from_base(rng, "AC1", 2382, pct_vol=1.5, decimals=0),
+        simulated_quote_from_base(rng, "AK1", 4802, pct_vol=1.6, decimals=0),
+        simulated_quote_from_base(rng, "AE1", 3112, pct_vol=1.6, decimals=0),
+        simulated_quote_from_base(rng, "SH1", 8508, pct_vol=1.4, decimals=0),
+        simulated_quote_from_base(rng, "ZRR1", 2291, pct_vol=1.4, decimals=0),
+        simulated_quote_from_base(rng, "ZR01", 10054, pct_vol=1.5, decimals=0),
+        simulated_quote_from_base(rng, "PA1", 8824, pct_vol=1.4, decimals=0),
+        simulated_quote_from_base(rng, "CB1", 5421, pct_vol=1.6, decimals=0),
+        simulated_quote_from_base(rng, "RT1", 17025, pct_vol=1.5, decimals=0),
+        simulated_quote_from_base(rng, "SRB1", 13550, pct_vol=1.6, decimals=0),
+    ]
+
+    # --------------------------------------------------------
+    # OVERVIEW INDICES
+    # --------------------------------------------------------
+    asia_rows = [
+        simulated_quote_from_base(rng, "STI", 4757, pct_vol=1.5, decimals=0),
+        simulated_quote_from_base(rng, "HSI", 25408, pct_vol=1.4, decimals=0),
+        simulated_quote_from_base(rng, "SHSZ300", 4615, pct_vol=1.1, decimals=0),
+        simulated_quote_from_base(rng, "SHCOMP", 4097, pct_vol=1.1, decimals=0),
+        simulated_quote_from_base(rng, "SZCOMP", 2681, pct_vol=1.2, decimals=0),
+        simulated_quote_from_base(rng, "TPX", 3576, pct_vol=1.2, decimals=0),
+        simulated_quote_from_base(rng, "NKY", 52729, pct_vol=1.5, decimals=0),
+        simulated_quote_from_base(rng, "KOSPI", 5252, pct_vol=1.4, decimals=0),
+        simulated_quote_from_base(rng, "TWSE", 32110, pct_vol=1.4, decimals=0),
+        simulated_quote_from_base(rng, "NIFTY", 24028, pct_vol=1.2, decimals=0),
+    ]
+
+    america_rows = [
+        simulated_quote_from_base(rng, "INDU", 47502, pct_vol=1.1, decimals=0),
+        simulated_quote_from_base(rng, "SPX", 6740, pct_vol=1.0, decimals=0),
+        simulated_quote_from_base(rng, "CCMP", 22388, pct_vol=1.1, decimals=0),
+        simulated_quote_from_base(rng, "SPTSX", 33084, pct_vol=1.0, decimals=0),
+        simulated_quote_from_base(rng, "MEXBOL", 67314, pct_vol=1.4, decimals=0),
+        simulated_quote_from_base(rng, "IBOV", 178556, pct_vol=1.4, decimals=0),
+    ]
+
+    europe_rows = [
+        simulated_quote_from_base(rng, "SX5E", 5621, pct_vol=1.1, decimals=0),
+        simulated_quote_from_base(rng, "UKX", 10170, pct_vol=1.0, decimals=0),
+        simulated_quote_from_base(rng, "CAC", 7837, pct_vol=1.0, decimals=0),
+        simulated_quote_from_base(rng, "DAX", 23269, pct_vol=1.0, decimals=0),
+        simulated_quote_from_base(rng, "IBEX", 16785, pct_vol=1.0, decimals=0),
+        simulated_quote_from_base(rng, "FTSEMIB", 43544, pct_vol=1.1, decimals=0),
+        simulated_quote_from_base(rng, "OMX", 2977, pct_vol=1.2, decimals=0),
+        simulated_quote_from_base(rng, "SMI", 12858, pct_vol=1.0, decimals=0),
+    ]
+
+    return {
+        "broad": build_quote_rows(broad_rows),
+        "energy": build_quote_rows(energy_rows),
+        "metals": build_quote_rows(metals_rows),
+        "agriculture": build_quote_rows(ag_rows),
+        "china_energy": build_quote_rows(china_energy_rows),
+        "china_metals": build_quote_rows(china_metals_rows),
+        "china_agriculture": build_quote_rows(china_ag_rows),
+        "indices_asia": build_quote_rows(asia_rows),
+        "indices_america": build_quote_rows(america_rows),
+        "indices_europe": build_quote_rows(europe_rows),
+    }
+
+
+market_tables = build_market_monitor_tables()
+
+# ============================================================
+# HEADER
+# ============================================================
+
+st.markdown('<div class="dashboard-title">Cotton Trading Dashboard</div>', unsafe_allow_html=True)
+st.markdown(
+    '<div class="dashboard-subtitle">Preview version — simulated market data, structure aligned to final Bloomberg-based architecture.</div>',
+    unsafe_allow_html=True,
+)
+
+# ============================================================
+# TOP SUMMARY CARDS
+# ============================================================
+
+top1, top2, top3, top4 = st.columns(4)
+
+with top1:
     st.markdown(
-        f"""
-        <div class="signal-box">
-            <div class="signal-label">Composite Directional Bias</div>
-            <div class="signal-value">{signal_label}</div>
-            <div class="signal-sub">Score {composite_score:+.2f} based on weighted cross-market drivers.</div>
+        """
+        <div class="top-card">
+            <div class="top-card-label">Active Contract</div>
+            <div class="top-card-value">CT1 Comdty</div>
+            <div class="top-card-sub">Front Month</div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    top1, top2 = st.columns(2)
-    with top1:
-        st.plotly_chart(
-            styled_line_chart(df.index, df["CT1"], "Cotton Front Month (CT1)", fill=True),
-            use_container_width=True,
-            config={"displayModeBar": False},
-        )
-    with top2:
-        st.plotly_chart(
-            styled_line_chart(df.index, df["DXY"], "Dollar Index (DXY)", line_color="#f3b463"),
-            use_container_width=True,
-            config={"displayModeBar": False},
-        )
+with top2:
+    st.markdown(
+        f"""
+        <div class="top-card">
+            <div class="top-card-label">Composite Score</div>
+            <div class="top-card-value {score_css_class}">{composite_score:+.2f}</div>
+            <div class="top-card-sub {score_css_class}">{score_direction}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-    bottom1, bottom2 = st.columns(2)
-    with bottom1:
-        st.plotly_chart(
-            styled_line_chart(df.index, df["MAY_JUL"], "May / Jul Spread", line_color="#7ef0a9"),
-            use_container_width=True,
-            config={"displayModeBar": False},
-        )
-    with bottom2:
-        corr = df["CT1"].rolling(12).corr(df["DXY"]).fillna(0)
-        st.plotly_chart(
-            styled_line_chart(df.index, corr, "Rolling Corr: CT1 vs DXY", line_color="#e38cff"),
-            use_container_width=True,
-            config={"displayModeBar": False},
-        )
+with top3:
+    cotton_move = pct_change(latest["CT1"], prev["CT1"])
+    cotton_direction = signed_arrow(cotton_move)
+    cotton_class = "score-bullish" if cotton_move > 0 else "score-bearish" if cotton_move < 0 else "score-neutral"
 
-# ---------- Bottom section ----------
+    st.markdown(
+        f"""
+        <div class="top-card">
+            <div class="top-card-label">Cotton Bias</div>
+            <div class="top-card-value {cotton_class}">{cotton_direction} {bias_label(cotton_move)}</div>
+            <div class="top-card-sub">{format_last(latest["CT1"], 2)} c/lb</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+with top4:
+    st.markdown(
+        f"""
+        <div class="top-card">
+            <div class="top-card-label">Last Update</div>
+            <div class="top-card-value">{datetime.now().strftime("%H:%M:%S")}</div>
+            <div class="top-card-sub">Demo mode</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
 st.divider()
-b1, b2, b3 = st.columns(3)
 
-bullish = sorted(
-    [(k, v * weights[k]) for k, v in signals.items()],
-    key=lambda x: x[1],
-    reverse=True,
+# ============================================================
+# MAIN MARKET MONITOR LAYOUT
+# ============================================================
+
+left_col, right_col = st.columns([0.52, 0.48], gap="large")
+
+# ------------------------------------------------------------
+# LEFT COLUMN
+# ------------------------------------------------------------
+with left_col:
+    st.markdown('<div class="table-card">', unsafe_allow_html=True)
+    st.markdown('<div class="section-title">Cotton #2 Indicators</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-subtitle">Main cross-market drivers relevant for cotton direction.</div>',
+        unsafe_allow_html=True,
+    )
+
+    st.dataframe(
+        indicator_df,
+        use_container_width=True,
+        hide_index=True,
+        height=420,
+    )
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # Signal breakdown
+    breakdown_rows = [
+        {
+            "Driver": "Cotton Momentum",
+            "Signal": round(signals["cotton_momentum"], 2),
+            "Weight": weights["cotton_momentum"],
+            "Contribution": round(signals["cotton_momentum"] * weights["cotton_momentum"], 2),
+        },
+        {
+            "Driver": "Spread Structure",
+            "Signal": round(signals["spread_structure"], 2),
+            "Weight": weights["spread_structure"],
+            "Contribution": round(signals["spread_structure"] * weights["spread_structure"], 2),
+        },
+        {
+            "Driver": "Soft Complex",
+            "Signal": round(signals["soft_complex"], 2),
+            "Weight": weights["soft_complex"],
+            "Contribution": round(signals["soft_complex"] * weights["soft_complex"], 2),
+        },
+        {
+            "Driver": "Agri Complex",
+            "Signal": round(signals["agri_complex"], 2),
+            "Weight": weights["agri_complex"],
+            "Contribution": round(signals["agri_complex"] * weights["agri_complex"], 2),
+        },
+        {
+            "Driver": "Energy",
+            "Signal": round(signals["energy"], 2),
+            "Weight": weights["energy"],
+            "Contribution": round(signals["energy"] * weights["energy"], 2),
+        },
+        {
+            "Driver": "Macro",
+            "Signal": round(signals["macro"], 2),
+            "Weight": weights["macro"],
+            "Contribution": round(signals["macro"] * weights["macro"], 2),
+        },
+    ]
+    breakdown_df = pd.DataFrame(breakdown_rows)
+
+    st.markdown('<div class="table-card">', unsafe_allow_html=True)
+    st.markdown('<div class="section-title">Signal Breakdown</div>', unsafe_allow_html=True)
+    st.dataframe(
+        breakdown_df,
+        use_container_width=True,
+        hide_index=True,
+        height=255,
+    )
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # Europe / US commodities
+    st.markdown('<div class="table-card">', unsafe_allow_html=True)
+    st.markdown('<div class="section-title">Europe / US Commodities</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-subtitle">Bloomberg-style monitor for broad commodities, energy, metals and agriculture/softs.</div>',
+        unsafe_allow_html=True,
+    )
+
+    eu_top1, eu_top2 = st.columns(2)
+
+    with eu_top1:
+        st.markdown("**Broad**")
+        st.dataframe(market_tables["broad"], use_container_width=True, hide_index=True, height=165)
+
+        st.markdown("**Energy**")
+        st.dataframe(market_tables["energy"], use_container_width=True, hide_index=True, height=280)
+
+    with eu_top2:
+        st.markdown("**Metals**")
+        st.dataframe(market_tables["metals"], use_container_width=True, hide_index=True, height=390)
+
+        st.markdown("**Agriculture / Softs**")
+        st.dataframe(market_tables["agriculture"], use_container_width=True, hide_index=True, height=280)
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# ------------------------------------------------------------
+# RIGHT COLUMN
+# ------------------------------------------------------------
+with right_col:
+    st.markdown('<div class="table-card">', unsafe_allow_html=True)
+    st.markdown('<div class="section-title">China Commodities</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-subtitle">Separate view for Chinese commodity markets, as requested.</div>',
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("**Energy**")
+    st.dataframe(
+        market_tables["china_energy"],
+        use_container_width=True,
+        hide_index=True,
+        height=155,
+    )
+
+    st.markdown("**Metals**")
+    st.dataframe(
+        market_tables["china_metals"],
+        use_container_width=True,
+        hide_index=True,
+        height=315,
+    )
+
+    st.markdown("**Agriculture / Softs / Oilseeds**")
+    st.dataframe(
+        market_tables["china_agriculture"],
+        use_container_width=True,
+        hide_index=True,
+        height=360,
+    )
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# ============================================================
+# OVERVIEW INDICES SECTION
+# ============================================================
+
+st.divider()
+
+st.markdown('<div class="table-card">', unsafe_allow_html=True)
+st.markdown('<div class="section-title">Overview Indices</div>', unsafe_allow_html=True)
+st.markdown(
+    '<div class="section-subtitle">Global equity index monitor inspired by Bloomberg Overview Indices.</div>',
+    unsafe_allow_html=True,
 )
-bearish = sorted(
-    [(k, v * weights[k]) for k, v in signals.items()],
-    key=lambda x: x[1],
+
+idx_col1, idx_col2, idx_col3 = st.columns(3)
+
+with idx_col1:
+    st.markdown("**Asia / Pacific**")
+    st.dataframe(
+        market_tables["indices_asia"],
+        use_container_width=True,
+        hide_index=True,
+        height=360,
+    )
+
+with idx_col2:
+    st.markdown("**America**")
+    st.dataframe(
+        market_tables["indices_america"],
+        use_container_width=True,
+        hide_index=True,
+        height=360,
+    )
+
+with idx_col3:
+    st.markdown("**Europe**")
+    st.dataframe(
+        market_tables["indices_europe"],
+        use_container_width=True,
+        hide_index=True,
+        height=360,
+    )
+
+st.markdown('</div>', unsafe_allow_html=True)
+
+# ============================================================
+# FOOTNOTE
+# ============================================================
+
+st.caption(
+    "Note: all data shown in this version is simulated. The purpose of this preview is to validate structure, layout and market-monitor logic before connecting the Bloomberg data layer."
 )
-
-pretty_names = {
-    "cotton_momentum": "Cotton Momentum",
-    "spread_structure": "Spread Structure",
-    "soft_complex": "Soft Complex",
-    "agri_complex": "Agri Complex",
-    "energy": "Energy",
-    "macro": "Macro",
-}
-
-with b1:
-    st.markdown('<div class="panel-title">Top Bullish Drivers</div>', unsafe_allow_html=True)
-    for k, v in bullish[:3]:
-        st.metric(pretty_names[k], f"{v:+.2f}")
-
-with b2:
-    st.markdown('<div class="panel-title">Top Bearish Drivers</div>', unsafe_allow_html=True)
-    for k, v in bearish[:3]:
-        st.metric(pretty_names[k], f"{v:+.2f}")
-
-with b3:
-    st.markdown('<div class="panel-title">Market Context</div>', unsafe_allow_html=True)
-    st.metric("Open Interest", f"{int(latest['OPEN_INT']):,}", f"{int(latest['OPEN_INT'] - prev['OPEN_INT']):+d}")
-    st.metric("Volume", f"{int(latest['VOLUME']):,}", f"{int(latest['VOLUME'] - prev['VOLUME']):+d}")
-    st.metric("BCOM", f"{latest['BCOM']:.2f}", f"{pct_change(latest['BCOM'], prev['BCOM']):+.2f}%")
