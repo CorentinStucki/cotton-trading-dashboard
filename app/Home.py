@@ -2,11 +2,6 @@
 # app/Home.py
 # Cotton dashboard - simulated preview version
 # ============================================================
-
-# ------------------------------------------------------------
-# Make sure the project root is visible to Python when
-# Streamlit Cloud runs app/Home.py from inside the "app" folder
-# ------------------------------------------------------------
 import sys
 from pathlib import Path
 
@@ -368,13 +363,6 @@ else:
 
 # ============================================================
 # MARKET SNAPSHOT FOR "COTTON #2 INDICATORS"
-# ============================================================
-# Important:
-# - NO ticker column
-# - NO Cotton Front Month
-# - NO spreads
-# - BCOMAG added
-# - Add "Vs Last Day"
 # ============================================================
 
 market_snapshot = {
@@ -809,27 +797,55 @@ mid_left, mid_right = st.columns([0.5, 0.5], gap="large")
 
 with mid_left:
     st.markdown('<div class="table-card">', unsafe_allow_html=True)
-    st.markdown('<div class="section-title">Europe / US Commodities</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-title">Overview Commodity</div>', unsafe_allow_html=True)
     st.markdown(
         '<div class="section-subtitle">Bloomberg-style monitor for broad commodities, energy, metals and agriculture/softs.</div>',
         unsafe_allow_html=True,
     )
 
-    eu_top1, eu_top2 = st.columns(2)
+    # --------------------------------------------------------
+    # Top layout inside Overview Commodity:
+    # LEFT  = Broad
+    # RIGHT = Energy (top) + Metals (bottom)
+    # --------------------------------------------------------
+    overview_left, overview_right = st.columns([0.48, 0.52], gap="large")
 
-    with eu_top1:
+    with overview_left:
         st.markdown("**Broad**")
-        st.dataframe(market_tables["broad"], use_container_width=True, hide_index=True, height=165)
+        st.dataframe(
+            market_tables["broad"],
+            use_container_width=True,
+            hide_index=True,
+            height=165,
+        )
 
+    with overview_right:
         st.markdown("**Energy**")
-        st.dataframe(market_tables["energy"], use_container_width=True, hide_index=True, height=280)
+        st.dataframe(
+            market_tables["energy"],
+            use_container_width=True,
+            hide_index=True,
+            height=315,
+        )
 
-    with eu_top2:
         st.markdown("**Metals**")
-        st.dataframe(market_tables["metals"], use_container_width=True, hide_index=True, height=390)
+        st.dataframe(
+            market_tables["metals"],
+            use_container_width=True,
+            hide_index=True,
+            height=455,
+        )
 
-        st.markdown("**Agriculture / Softs**")
-        st.dataframe(market_tables["agriculture"], use_container_width=True, hide_index=True, height=280)
+    # --------------------------------------------------------
+    # Bottom full-width table
+    # --------------------------------------------------------
+    st.markdown("**Agriculture / Softs**")
+    st.dataframe(
+        market_tables["agriculture"],
+        use_container_width=True,
+        hide_index=True,
+        height=350,
+    )
 
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -854,7 +870,7 @@ with mid_right:
         market_tables["china_metals"],
         use_container_width=True,
         hide_index=True,
-        height=315,
+        height=455,
     )
 
     st.markdown("**Agriculture / Softs / Oilseeds**")
@@ -862,7 +878,7 @@ with mid_right:
         market_tables["china_agriculture"],
         use_container_width=True,
         hide_index=True,
-        height=360,
+        height=470,
     )
 
     st.markdown('</div>', unsafe_allow_html=True)
@@ -888,7 +904,7 @@ with idx_col1:
         market_tables["indices_asia"],
         use_container_width=True,
         hide_index=True,
-        height=360,
+        height=430,
     )
 
 with idx_col2:
@@ -897,7 +913,7 @@ with idx_col2:
         market_tables["indices_america"],
         use_container_width=True,
         hide_index=True,
-        height=360,
+        height=430,
     )
 
 with idx_col3:
@@ -906,7 +922,7 @@ with idx_col3:
         market_tables["indices_europe"],
         use_container_width=True,
         hide_index=True,
-        height=360,
+        height=430,
     )
 
 st.markdown('</div>', unsafe_allow_html=True)
