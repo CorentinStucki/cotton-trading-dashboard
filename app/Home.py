@@ -1200,7 +1200,6 @@ with mid_right:
 
 st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
 st.divider()
-st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
 
 st.markdown('<div class="table-card">', unsafe_allow_html=True)
 st.markdown('<div class="section-title">Overview Indices</div>', unsafe_allow_html=True)
