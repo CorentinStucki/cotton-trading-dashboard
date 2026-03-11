@@ -1201,7 +1201,7 @@ with idx_col1:
         style_market_table_int(market_tables["indices_asia"]),
         use_container_width=True,
         hide_index=True,
-        height=400,
+        height=390,
     )
 
 with idx_col2:
@@ -1210,7 +1210,7 @@ with idx_col2:
         style_market_table_int(market_tables["indices_america"]),
         use_container_width=True,
         hide_index=True,
-        height=400,
+        height=390,
     )
 
 with idx_col3:
@@ -1219,7 +1219,7 @@ with idx_col3:
         style_market_table_int(market_tables["indices_europe"]),
         use_container_width=True,
         hide_index=True,
-        height=400,
+        height=390,
     )
 
 st.markdown('</div>', unsafe_allow_html=True)
