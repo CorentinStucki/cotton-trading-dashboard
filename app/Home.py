@@ -344,22 +344,19 @@ def style_indicator_table(df: pd.DataFrame):
 def style_signal_table(df: pd.DataFrame):
     """
     Styling for Signal Breakdown table
-    - Signal / Contribution colored
-    - clean numeric formatting
+    - green/red signals
+    - proper decimal formatting
     """
 
-    # Create a copy to avoid modifying original
-    df = df.copy()
-
-    # Format numbers
-    df["Signal"] = df["Signal"].round(2)
-    df["Weight"] = df["Weight"].round(2)
-    df["Contribution"] = df["Contribution"].round(2)
-
-    styler = df.style
-
-    # Color signal and contribution columns
-    styler = styler.applymap(color_pos_neg, subset=["Signal", "Contribution"])
+    styler = (
+        df.style
+        .applymap(color_pos_neg, subset=["Signal", "Contribution"])
+        .format({
+            "Signal": "{:+.2f}",
+            "Weight": "{:.2f}",
+            "Contribution": "{:+.2f}",
+        })
+    )
 
     return styler
 
