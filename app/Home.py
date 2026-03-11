@@ -16,6 +16,8 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
+from datetime import datetime
+import pytz
 # ------------------------------------------------------------
 # Import scoring helpers from our local module
 # ------------------------------------------------------------
@@ -33,6 +35,10 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed",
 )
+
+import time
+time.sleep(1)
+st.rerun()
 
 # ============================================================
 # STYLING
@@ -914,59 +920,19 @@ with top3:
     )
 
 with top4:
+
+    singapore = pytz.timezone("Asia/Singapore")
+    sg_time = datetime.now(singapore).strftime("%H:%M:%S")
+
     st.markdown(
-        """
+        f"""
         <div class="top-card">
             <div class="top-card-label">Last Update</div>
-            <div class="top-card-sub" style="margin-bottom: 0.35rem;">Singapore time</div>
+            <div class="top-card-value">{sg_time}</div>
+            <div class="top-card-sub">Singapore time</div>
         </div>
         """,
         unsafe_allow_html=True,
-    )
-
-    components.html(
-        """
-        <div style="
-            margin-top:-88px;
-            padding-left:18px;
-            padding-right:18px;
-            font-family: sans-serif;
-            color:#f4f7ff;
-        ">
-            <div id="sg-clock" style="
-                font-size: 1.75rem;
-                font-weight: 800;
-                line-height: 1.1;
-                margin-bottom: 0.30rem;
-            ">--:--:--</div>
-            <div style="
-                color:#c9d2e6;
-                font-size:0.92rem;
-            ">Live clock</div>
-        </div>
-
-        <script>
-        function updateSingaporeClock() {
-            const now = new Date();
-            const formatter = new Intl.DateTimeFormat('en-GB', {
-                timeZone: 'Asia/Singapore',
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit',
-                hour12: false
-            });
-            const time = formatter.format(now);
-            const el = document.getElementById("sg-clock");
-            if (el) {
-                el.textContent = time;
-            }
-        }
-
-        updateSingaporeClock();
-        setInterval(updateSingaporeClock, 1000);
-        </script>
-        """,
-        height=70,
     )
 
 # ============================================================
