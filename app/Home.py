@@ -1198,7 +1198,6 @@ with mid_right:
 # OVERVIEW INDICES SECTION
 # ============================================================
 
-st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
 st.divider()
 
 st.markdown('<div class="table-card">', unsafe_allow_html=True)
