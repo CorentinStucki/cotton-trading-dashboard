@@ -343,30 +343,23 @@ def style_indicator_table(df: pd.DataFrame):
 # ------------------------------------------------------------
 def style_signal_table(df: pd.DataFrame):
     """
-    Styling for the signal breakdown table
-    Bloomberg-like:
-    - Driver in orange
-    - Signal / Contribution green if positive, red if negative
-    - Clean numeric formatting
+    Styling for Signal Breakdown table
+    - Signal / Contribution colored
+    - clean numeric formatting
     """
+
+    # Create a copy to avoid modifying original
+    df = df.copy()
+
+    # Format numbers
+    df["Signal"] = df["Signal"].round(2)
+    df["Weight"] = df["Weight"].round(2)
+    df["Contribution"] = df["Contribution"].round(2)
+
     styler = df.style
 
-    if "Driver" in df.columns:
-        styler = styler.applymap(color_ticker, subset=["Driver"])
-
-    existing_signal_cols = [c for c in ["Signal", "Contribution"] if c in df.columns]
-    if existing_signal_cols:
-        styler = styler.applymap(color_pos_neg, subset=existing_signal_cols)
-
-    format_dict = {}
-    if "Signal" in df.columns:
-        format_dict["Signal"] = "{:+.2f}"
-    if "Contribution" in df.columns:
-        format_dict["Contribution"] = "{:+.2f}"
-    if "Weight" in df.columns:
-        format_dict["Weight"] = "{:.2f}"
-
-    styler = styler.format(format_dict)
+    # Color signal and contribution columns
+    styler = styler.applymap(color_pos_neg, subset=["Signal", "Contribution"])
 
     return styler
 
@@ -919,7 +912,11 @@ with top_right:
         '<div class="section-subtitle">How the composite score is built.</div>',
         unsafe_allow_html=True,
     )
-    st.table(style_signal_table(breakdown_df)
+    st.dataframe(
+    style_signal_table(breakdown_df),
+    use_container_width=True,
+    hide_index=True,
+    height=210,
     )
     st.markdown('</div>', unsafe_allow_html=True)
 
