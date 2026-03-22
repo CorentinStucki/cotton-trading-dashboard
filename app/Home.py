@@ -371,33 +371,28 @@ def format_arrow_value(value: float, decimals: int = 2) -> str:
 # ------------------------------------------------------------
 def style_indicator_table(df: pd.DataFrame):
     """
-    Styling for Cotton #2 Indicators
-    Uses hidden numeric helper columns for color styling while keeping
-    display columns with Bloomberg-like arrows.
+    Styling for Softs / Grains & Oilseeds tables.
+    Uses hidden numeric helper columns for color styling.
     """
-    display_df = df[["Variable", "Last", "Intensity", "Vs Last Day", "Vs Last Week", "Bias"]].copy()
+    display_df = df[["Variable", "Last", "Intensity (%)", "DOD", "WOW", "Bias"]].copy()
     styler = display_df.style
 
-    # Color daily variation column using hidden numeric values
-    if "_daily_num" in df.columns:
-        daily_colors = [color_pos_neg(v) for v in df["_daily_num"]]
-        styler = styler.apply(lambda _: daily_colors, subset=["Vs Last Day"], axis=0)
+    if "_dod_num" in df.columns:
+        dod_colors = [color_pos_neg(v) for v in df["_dod_num"]]
+        styler = styler.apply(lambda _: dod_colors, subset=["DOD"], axis=0)
 
-    # Color weekly variation column using hidden numeric values
-    if "_weekly_num" in df.columns:
-        weekly_colors = [color_pos_neg(v) for v in df["_weekly_num"]]
-        styler = styler.apply(lambda _: weekly_colors, subset=["Vs Last Week"], axis=0)
+    if "_wow_num" in df.columns:
+        wow_colors = [color_pos_neg(v) for v in df["_wow_num"]]
+        styler = styler.apply(lambda _: wow_colors, subset=["WOW"], axis=0)
 
-    # Color bias text using hidden bias label
     if "_bias_text" in df.columns:
         bias_colors = [color_bias(v) for v in df["_bias_text"]]
         styler = styler.apply(lambda _: bias_colors, subset=["Bias"], axis=0)
 
-    # Format numeric columns
     styler = styler.format(
         {
             "Last": "{:,.2f}",
-            "Intensity": "{:,.0f}",
+            "Intensity (%)": "{:.1f}",
         }
     )
 
@@ -561,36 +556,36 @@ else:
 softs_snapshot = {
     "Sugar": {
         "last": latest["SB1"],
-        "daily_delta": latest["SB1"] - prev["SB1"],
-        "weekly_delta": latest["SB1"] - week_ago["SB1"],
+        "dod_pct": pct_change(latest["SB1"], prev["SB1"]),
+        "wow_pct": pct_change(latest["SB1"], week_ago["SB1"]),
     },
     "Coffee": {
         "last": latest["KC1"],
-        "daily_delta": latest["KC1"] - prev["KC1"],
-        "weekly_delta": latest["KC1"] - week_ago["KC1"],
+        "dod_pct": pct_change(latest["KC1"], prev["KC1"]),
+        "wow_pct": pct_change(latest["KC1"], week_ago["KC1"]),
     },
     "Cocoa": {
         "last": latest["CC1"],
-        "daily_delta": latest["CC1"] - prev["CC1"],
-        "weekly_delta": latest["CC1"] - week_ago["CC1"],
+        "dod_pct": pct_change(latest["CC1"], prev["CC1"]),
+        "wow_pct": pct_change(latest["CC1"], week_ago["CC1"]),
     },
 }
 
-ags_snapshot = {
+grains_snapshot = {
     "Corn": {
         "last": latest["C1"],
-        "daily_delta": latest["C1"] - prev["C1"],
-        "weekly_delta": latest["C1"] - week_ago["C1"],
+        "dod_pct": pct_change(latest["C1"], prev["C1"]),
+        "wow_pct": pct_change(latest["C1"], week_ago["C1"]),
     },
     "Soybeans": {
         "last": latest["S1"],
-        "daily_delta": latest["S1"] - prev["S1"],
-        "weekly_delta": latest["S1"] - week_ago["S1"],
+        "dod_pct": pct_change(latest["S1"], prev["S1"]),
+        "wow_pct": pct_change(latest["S1"], week_ago["S1"]),
     },
     "Wheat": {
         "last": latest["W1"],
-        "daily_delta": latest["W1"] - prev["W1"],
-        "weekly_delta": latest["W1"] - week_ago["W1"],
+        "dod_pct": pct_change(latest["W1"], prev["W1"]),
+        "wow_pct": pct_change(latest["W1"], week_ago["W1"]),
     },
 }
 
@@ -598,40 +593,61 @@ ags_snapshot = {
 def build_indicator_df(snapshot_dict: dict[str, dict]) -> pd.DataFrame:
     rows = []
 
+    # 1) Build raw rows with a raw intensity score
     for name, item in snapshot_dict.items():
-        direction = "Bullish" if item["weekly_delta"] > 0 else "Bearish" if item["weekly_delta"] < 0 else "Neutral"
+        direction = "Bullish" if item["wow_pct"] > 0 else "Bearish" if item["wow_pct"] < 0 else "Neutral"
         bias_arrow = "↑" if direction == "Bullish" else "↓" if direction == "Bearish" else "→"
 
-        intensity = score_to_intensity(
-            normalize_change_to_signal(
-                item["weekly_delta"],
-                scale=max(abs(item["last"]) * 0.01, 0.5),
-            )
-        )
+        raw_intensity = abs(item["wow_pct"])
 
         rows.append(
             {
                 "Variable": name,
                 "Last": round(item["last"], 2),
-                "Intensity": intensity,
 
-                # Display versions with arrows
-                "Vs Last Day": format_arrow_value(item["daily_delta"], 2),
-                "Vs Last Week": format_arrow_value(item["weekly_delta"], 2),
+                # display columns
+                "DOD": format_arrow_value(item["dod_pct"], 2) + "%",
+                "WOW": format_arrow_value(item["wow_pct"], 2) + "%",
                 "Bias": f"{bias_arrow} {direction}",
 
-                # Hidden numeric helper columns for styling
-                "_daily_num": round(item["daily_delta"], 2),
-                "_weekly_num": round(item["weekly_delta"], 2),
+                # hidden numeric helper columns
+                "_dod_num": round(item["dod_pct"], 2),
+                "_wow_num": round(item["wow_pct"], 2),
                 "_bias_text": direction,
+                "_raw_intensity": raw_intensity,
             }
         )
 
-    return pd.DataFrame(rows).sort_values("Intensity", ascending=False)
+    df = pd.DataFrame(rows)
+
+    # 2) Convert raw intensity into weights summing to 100%
+    total_intensity = df["_raw_intensity"].sum()
+
+    if total_intensity == 0:
+        df["Intensity (%)"] = round(100 / len(df), 1)
+    else:
+        df["Intensity (%)"] = (df["_raw_intensity"] / total_intensity * 100).round(1)
+
+    # reorder
+    df = df[
+        [
+            "Variable",
+            "Last",
+            "Intensity (%)",
+            "DOD",
+            "WOW",
+            "Bias",
+            "_dod_num",
+            "_wow_num",
+            "_bias_text",
+        ]
+    ]
+
+    return df.sort_values("Intensity (%)", ascending=False).reset_index(drop=True)
 
 
 softs_indicator_df = build_indicator_df(softs_snapshot)
-ags_indicator_df = build_indicator_df(ags_snapshot)
+grains_indicator_df = build_indicator_df(grains_snapshot)
 
 # ============================================================
 # HELPERS FOR MARKET MONITOR TABLES
@@ -840,10 +856,6 @@ market_tables = build_market_monitor_tables()
 # ============================================================
 
 st.markdown('<div class="dashboard-title">Cotton Trading Dashboard</div>', unsafe_allow_html=True)
-st.markdown(
-    '<div class="dashboard-subtitle">Preview version — simulated market data, structure aligned to final Bloomberg-based architecture.</div>',
-    unsafe_allow_html=True,
-)
 st.markdown('<div class="header-spacer"></div>', unsafe_allow_html=True)
 
 # ============================================================
@@ -861,7 +873,7 @@ with top1:
     st.markdown(
         f"""
         <div class="top-card">
-            <div class="top-card-label">Cotton Spot</div>
+            <div class="top-card-label">CTK1</div>
             <div class="top-card-value">{latest["CT1"]:.2f}</div>
             <div class="top-card-sub {cotton_intraday_class}">
                 {cotton_intraday_arrow} {cotton_intraday:+.2f} ({cotton_intraday_pct:+.2f}%)
@@ -891,7 +903,7 @@ with top3:
     st.markdown(
         f"""
         <div class="top-card">
-            <div class="top-card-label">Cotton Bias</div>
+            <div class="top-card-label">Bias</div>
             <div class="top-card-value {cotton_class}">{cotton_direction} {bias_label(cotton_move)}</div>
             <div class="top-card-sub">{format_last(latest["CT1"], 2)} c/lb</div>
         </div>
@@ -920,11 +932,11 @@ with top4:
 
             <div id="sg-clock" style="
                 color:#f4f7ff;
-                font-size:1.75rem;
+                font-size:1.55rem;
                 font-weight:800;
                 line-height:1.1;
                 margin-bottom:0.25rem;
-            ">--:--:--</div>
+            ">--/--/---- --:--:--</div>
 
             <div style="
                 color:#c9d2e6;
@@ -935,17 +947,28 @@ with top4:
         <script>
         function updateSingaporeClock() {
             const now = new Date();
-            const formatter = new Intl.DateTimeFormat('en-GB', {
+
+            const dateFormatter = new Intl.DateTimeFormat('en-GB', {
+                timeZone: 'Asia/Singapore',
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric'
+            });
+
+            const timeFormatter = new Intl.DateTimeFormat('en-GB', {
                 timeZone: 'Asia/Singapore',
                 hour: '2-digit',
                 minute: '2-digit',
                 second: '2-digit',
                 hour12: false
             });
-            const time = formatter.format(now);
+
+            const date = dateFormatter.format(now);
+            const time = timeFormatter.format(now);
+
             const el = document.getElementById('sg-clock');
             if (el) {
-                el.textContent = time;
+                el.textContent = `${date} ${time}`;
             }
         }
 
@@ -969,24 +992,19 @@ top_left, top_right = st.columns([0.62, 0.38], gap="large")
 with top_left:
     st.markdown('<div class="table-card">', unsafe_allow_html=True)
     st.markdown('<div class="section-title">Cotton #2 Indicators</div>', unsafe_allow_html=True)
-    st.markdown(
-        '<div class="section-subtitle">Main cross-market drivers relevant for cotton direction.</div>',
-        unsafe_allow_html=True,
-    )
 
     # --------------------------------------------------------
     # Softs section
     # --------------------------------------------------------
-    softs_avg_intensity = softs_indicator_df["Intensity"].mean()
-    softs_weekly_mean = softs_indicator_df["_weekly_num"].mean()
-    softs_avg_bias = "Bullish" if softs_weekly_mean > 0 else "Bearish" if softs_weekly_mean < 0 else "Neutral"
+    softs_avg_intensity = softs_indicator_df["Intensity (%)"].sum().round(0)
+    softs_wow_mean = softs_indicator_df["_wow_num"].mean()
+    softs_avg_bias = "Bullish" if softs_wow_mean > 0 else "Bearish" if softs_wow_mean < 0 else "Neutral"
     softs_avg_class = "score-bullish" if softs_avg_bias == "Bullish" else "score-bearish" if softs_avg_bias == "Bearish" else "score-neutral"
 
-    st.markdown("**Softs**")
     st.markdown(
         f"""
         <div style="margin-bottom:0.45rem;">
-            <span style="color:#9ba8c5; font-size:0.88rem;">Average Softs Intensity:</span>
+            <span style="font-weight:700; color:#f4f7ff;">Softs:</span>
             <span class="{softs_avg_class}" style="font-weight:700; margin-left:8px;">{softs_avg_intensity:.0f}</span>
             <span class="{softs_avg_class}" style="font-weight:700; margin-left:10px;">{softs_avg_bias}</span>
         </div>
@@ -1004,27 +1022,26 @@ with top_left:
     st.markdown("<div style='height: 18px;'></div>", unsafe_allow_html=True)
 
     # --------------------------------------------------------
-    # Ags & Oilseeds section
+    # Grains & Oilseeds section
     # --------------------------------------------------------
-    ags_avg_intensity = ags_indicator_df["Intensity"].mean()
-    ags_weekly_mean = ags_indicator_df["_weekly_num"].mean()
-    ags_avg_bias = "Bullish" if ags_weekly_mean > 0 else "Bearish" if ags_weekly_mean < 0 else "Neutral"
-    ags_avg_class = "score-bullish" if ags_avg_bias == "Bullish" else "score-bearish" if ags_avg_bias == "Bearish" else "score-neutral"
+    grains_avg_intensity = grains_indicator_df["Intensity (%)"].sum().round(0)
+    grains_wow_mean = grains_indicator_df["_wow_num"].mean()
+    grains_avg_bias = "Bullish" if grains_wow_mean > 0 else "Bearish" if grains_wow_mean < 0 else "Neutral"
+    grains_avg_class = "score-bullish" if grains_avg_bias == "Bullish" else "score-bearish" if grains_avg_bias == "Bearish" else "score-neutral"
 
-    st.markdown("**Ags & Oilseeds**")
     st.markdown(
         f"""
         <div style="margin-bottom:0.45rem;">
-            <span style="color:#9ba8c5; font-size:0.88rem;">Average Ags Intensity:</span>
-            <span class="{ags_avg_class}" style="font-weight:700; margin-left:8px;">{ags_avg_intensity:.0f}</span>
-            <span class="{ags_avg_class}" style="font-weight:700; margin-left:10px;">{ags_avg_bias}</span>
+            <span style="font-weight:700; color:#f4f7ff;">Grains & Oilseeds:</span>
+            <span class="{grains_avg_class}" style="font-weight:700; margin-left:8px;">{grains_avg_intensity:.0f}</span>
+            <span class="{grains_avg_class}" style="font-weight:700; margin-left:10px;">{grains_avg_bias}</span>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
     st.dataframe(
-        style_indicator_table(ags_indicator_df),
+        style_indicator_table(grains_indicator_df),
         use_container_width=True,
         hide_index=True,
         height=140,
@@ -1033,57 +1050,44 @@ with top_left:
     st.markdown('</div>', unsafe_allow_html=True)
 
 with top_right:
-    breakdown_rows = [
-        {
-            "Driver": "Cotton Momentum",
-            "Signal": round(signals["cotton_momentum"], 2),
-            "Weight": weights["cotton_momentum"],
-            "Contribution": round(signals["cotton_momentum"] * weights["cotton_momentum"], 2),
-        },
-        {
-            "Driver": "Spread Structure",
-            "Signal": round(signals["spread_structure"], 2),
-            "Weight": weights["spread_structure"],
-            "Contribution": round(signals["spread_structure"] * weights["spread_structure"], 2),
-        },
-        {
-            "Driver": "Soft Complex",
-            "Signal": round(signals["soft_complex"], 2),
-            "Weight": weights["soft_complex"],
-            "Contribution": round(signals["soft_complex"] * weights["soft_complex"], 2),
-        },
-        {
-            "Driver": "Agri Complex",
-            "Signal": round(signals["agri_complex"], 2),
-            "Weight": weights["agri_complex"],
-            "Contribution": round(signals["agri_complex"] * weights["agri_complex"], 2),
-        },
-        {
-            "Driver": "Energy",
-            "Signal": round(signals["energy"], 2),
-            "Weight": weights["energy"],
-            "Contribution": round(signals["energy"] * weights["energy"], 2),
-        },
-        {
-            "Driver": "Macro",
-            "Signal": round(signals["macro"], 2),
-            "Weight": weights["macro"],
-            "Contribution": round(signals["macro"] * weights["macro"], 2),
-        },
+    signal_rows = [
+        {"Variable": "Cotton Momentum", "Last": signals["cotton_momentum"], "Weight": weights["cotton_momentum"]},
+        {"Variable": "Spread Structure", "Last": signals["spread_structure"], "Weight": weights["spread_structure"]},
+        {"Variable": "Soft Complex", "Last": signals["soft_complex"], "Weight": weights["soft_complex"]},
+        {"Variable": "Agri Complex", "Last": signals["agri_complex"], "Weight": weights["agri_complex"]},
+        {"Variable": "Energy", "Last": signals["energy"], "Weight": weights["energy"]},
+        {"Variable": "Macro", "Last": signals["macro"], "Weight": weights["macro"]},
     ]
-    breakdown_df = pd.DataFrame(breakdown_rows)
+    signal_df = pd.DataFrame(signal_rows)
+
+    # intensity must sum to 100
+    signal_df["Intensity (%)"] = (signal_df["Weight"] / signal_df["Weight"].sum() * 100).round(1)
+
+    # DOD / WOW style proxy fields for display consistency
+    signal_df["_dod_num"] = signal_df["Last"].round(2)
+    signal_df["_wow_num"] = (signal_df["Last"] * signal_df["Weight"]).round(2)
+
+    signal_df["DOD"] = signal_df["_dod_num"].apply(lambda x: format_arrow_value(x, 2))
+    signal_df["WOW"] = signal_df["_wow_num"].apply(lambda x: format_arrow_value(x, 2))
+
+    signal_df["_bias_text"] = signal_df["Last"].apply(
+        lambda x: "Bullish" if x > 0 else "Bearish" if x < 0 else "Neutral"
+    )
+    signal_df["Bias"] = signal_df["_bias_text"].apply(
+        lambda x: f"↑ {x}" if x == "Bullish" else f"↓ {x}" if x == "Bearish" else f"→ {x}"
+    )
+
+    signal_display_df = signal_df[
+        ["Variable", "Last", "Intensity (%)", "DOD", "WOW", "Bias", "_dod_num", "_wow_num", "_bias_text"]
+    ].copy()
 
     st.markdown('<div class="table-card">', unsafe_allow_html=True)
     st.markdown('<div class="section-title">Signal Breakdown</div>', unsafe_allow_html=True)
-    st.markdown(
-        '<div class="section-subtitle">How the composite score is built.</div>',
-        unsafe_allow_html=True,
-    )
     st.dataframe(
-    style_signal_table(breakdown_df),
-    use_container_width=True,
-    hide_index=True,
-    height=210,
+        style_indicator_table(signal_display_df),
+        use_container_width=True,
+        hide_index=True,
+        height=255,
     )
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -1096,10 +1100,7 @@ mid_left, mid_right = st.columns([0.5, 0.5], gap="large")
 with mid_left:
     st.markdown('<div class="table-card">', unsafe_allow_html=True)
     st.markdown('<div class="section-title">Overview Commodity</div>', unsafe_allow_html=True)
-    st.markdown(
-        '<div class="section-subtitle">Bloomberg-style monitor for broad commodities, energy, metals and agriculture/softs.</div>',
-        unsafe_allow_html=True,
-    )
+
 
     # --------------------------------------------------------
     # Top layout inside Overview Commodity:
@@ -1150,10 +1151,6 @@ with mid_left:
 with mid_right:
     st.markdown('<div class="table-card">', unsafe_allow_html=True)
     st.markdown('<div class="section-title">China Commodities</div>', unsafe_allow_html=True)
-    st.markdown(
-        '<div class="section-subtitle">Separate view for Chinese commodity markets, as requested.</div>',
-        unsafe_allow_html=True,
-    )
 
     st.markdown("**Energy**")
     st.dataframe(
