@@ -11,7 +11,6 @@ from datetime import datetime, timedelta, timezone
 
 import numpy as np
 import pandas as pd
-import pytz
 import streamlit as st
 import streamlit.components.v1 as components
 
@@ -29,7 +28,6 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed",
 )
-
 
 # ============================================================
 # STYLING
@@ -58,24 +56,12 @@ st.markdown(
         word-break: normal;
     }
 
-    .dashboard-subtitle {
-        color: #98a5c3;
-        font-size: 0.95rem;
-        margin-bottom: 1.25rem;
-    }
-
     .section-title {
         font-size: 1.08rem;
         font-weight: 700;
         color: #f2f5ff;
         margin-top: 0.35rem;
         margin-bottom: 0.45rem;
-    }
-
-    .section-subtitle {
-        color: #99a7c2;
-        font-size: 0.88rem;
-        margin-bottom: 0.55rem;
     }
 
     .top-card {
@@ -151,10 +137,9 @@ st.markdown(
 
 def seeded_rng() -> np.random.Generator:
     """
-    Create a deterministic random generator that changes with time,
-    so the demo data feels alive but remains stable enough per refresh.
+    Stable simulated data for 2 minutes at a time.
     """
-    seed = int(datetime.now().strftime("%Y%m%d%H%M"))
+    seed = int(datetime.now().timestamp() // 120)
     return np.random.default_rng(seed)
 
 
@@ -165,10 +150,6 @@ def make_series(
     vol: float,
     rng: np.random.Generator,
 ) -> np.ndarray:
-    """
-    Creates a simple mock time series using a noisy random walk.
-    Good enough for a realistic prototype.
-    """
     values = [start]
     for _ in range(n - 1):
         step = drift + rng.normal(0, vol)
@@ -177,27 +158,18 @@ def make_series(
 
 
 def make_time_index(n: int, freq_minutes: int = 60) -> pd.DatetimeIndex:
-    """
-    Creates a UTC datetime index.
-    """
     end = datetime.now(timezone.utc).replace(second=0, microsecond=0)
     start = end - timedelta(minutes=freq_minutes * (n - 1))
     return pd.date_range(start=start, periods=n, freq=f"{freq_minutes}min")
 
 
 def pct_change(current: float, previous: float) -> float:
-    """
-    Standard percentage change helper.
-    """
     if previous == 0:
         return 0.0
     return ((current - previous) / previous) * 100.0
 
 
 def signed_arrow(value: float) -> str:
-    """
-    Arrow helper for directional labels.
-    """
     if value > 0:
         return "↑"
     if value < 0:
@@ -206,9 +178,6 @@ def signed_arrow(value: float) -> str:
 
 
 def bias_label(value: float) -> str:
-    """
-    Basic directional label.
-    """
     if value > 0:
         return "Bullish"
     if value < 0:
@@ -217,24 +186,15 @@ def bias_label(value: float) -> str:
 
 
 def score_to_intensity(score: float) -> float:
-    """
-    Maps a score from [-3, +3] into [0, 100].
-    """
     clipped = max(-3.0, min(3.0, score))
     return round(((clipped + 3.0) / 6.0) * 100.0, 1)
 
 
 def format_last(value: float, decimals: int = 2) -> str:
-    """
-    Clean numeric formatting.
-    """
     return f"{value:,.{decimals}f}"
 
+
 def normalize_weights(weight_dict: dict[str, float]) -> dict[str, float]:
-    """
-    Normalize a dict of weights so the total sums to 1.
-    If total is 0, fallback to equal weights.
-    """
     total = sum(weight_dict.values())
     if total <= 0:
         n = len(weight_dict)
@@ -243,157 +203,81 @@ def normalize_weights(weight_dict: dict[str, float]) -> dict[str, float]:
 
 
 def weighted_group_score(signal_dict: dict[str, float], weight_dict: dict[str, float]) -> float:
-    """
-    Compute a weighted average score for a subgroup.
-    Weights are normalized automatically for robustness.
-    """
     norm_weights = normalize_weights(weight_dict)
     return sum(signal_dict[k] * norm_weights[k] for k in signal_dict if k in norm_weights)
 
-def build_quote_rows(raw_rows: list[dict]) -> pd.DataFrame:
-    """
-    Creates a standard market monitor table with display columns
-    plus hidden helper numeric columns used for styling.
-    """
-    df = pd.DataFrame(raw_rows)
-    return df[["Ticker", "Last Price", "Net", "%1D", "_net_num", "_pct_num"]]
-
-def color_ticker(val):
-    """
-    Bloomberg-like orange for tickers.
-    """
-    return "color: #f5a623; font-weight: 600;"
-
-
-def color_pos_neg(val):
-    """
-    Green if positive, red if negative, neutral grey if zero / missing.
-    """
-    try:
-        v = float(val)
-    except Exception:
-        return "color: #dfe6f5;"
-
-    if v > 0:
-        return "color: #59d98e; font-weight: 600;"
-    elif v < 0:
-        return "color: #ff6b6b; font-weight: 600;"
-    else:
-        return "color: #dfe6f5;"
-
-def color_bias(val):
-    """
-    Color textual bias values.
-    """
-    if str(val).lower() == "bullish":
-        return "color: #59d98e; font-weight: 600;"
-    elif str(val).lower() == "bearish":
-        return "color: #ff6b6b; font-weight: 600;"
-    else:
-        return "color: #f1c75b; font-weight: 600;"
-
-
-def style_market_table(df: pd.DataFrame):
-    """
-    Apply Bloomberg-like styling to market monitor tables.
-    - Ticker in orange
-    - Net / %1D green or red depending on sign
-    """
-    display_df = df[["Ticker", "Last Price", "Net", "%1D"]].copy()
-
-    styler = display_df.style
-
-    # Bloomberg orange for tickers
-    styler = styler.applymap(color_ticker, subset=["Ticker"])
-
-    # Net coloring
-    if "_net_num" in df.columns:
-        net_colors = [
-            color_pos_neg(v) for v in df["_net_num"]
-        ]
-        styler = styler.apply(
-            lambda _: net_colors,
-            subset=["Net"],
-            axis=0,
-        )
-
-    # %1D coloring
-    if "_pct_num" in df.columns:
-        pct_colors = [
-            color_pos_neg(v) for v in df["_pct_num"]
-        ]
-        styler = styler.apply(
-            lambda _: pct_colors,
-            subset=["%1D"],
-            axis=0,
-        )
-
-    styler = styler.format(
-        {
-            "Last Price": "{:,.1f}",
-        },
-        na_rep=""
-    )
-
-    return styler
-
-
-def style_market_table_int(df: pd.DataFrame):
-    """
-    Variant for mostly integer-like market tables.
-    """
-    display_df = df[["Ticker", "Last Price", "Net", "%1D"]].copy()
-
-    styler = display_df.style
-
-    styler = styler.applymap(color_ticker, subset=["Ticker"])
-
-    if "_net_num" in df.columns:
-        net_colors = [
-            color_pos_neg(v) for v in df["_net_num"]
-        ]
-        styler = styler.apply(
-            lambda _: net_colors,
-            subset=["Net"],
-            axis=0,
-        )
-
-    if "_pct_num" in df.columns:
-        pct_colors = [
-            color_pos_neg(v) for v in df["_pct_num"]
-        ]
-        styler = styler.apply(
-            lambda _: pct_colors,
-            subset=["%1D"],
-            axis=0,
-        )
-
-    styler = styler.format(
-        {
-            "Last Price": "{:,.0f}",
-        },
-        na_rep=""
-    )
-
-    return styler
 
 def format_arrow_value(value: float, decimals: int = 2) -> str:
-    """
-    Formats numeric variations with an arrow.
-    Example: ↑ 1.25 / ↓ -0.84 / → 0.00
-    """
     arrow = signed_arrow(value)
     return f"{arrow} {value:.{decimals}f}"
 
 
-# ------------------------------------------------------------
-# STYLE FOR INDICATOR TABLES
-# ------------------------------------------------------------
+def build_quote_rows(raw_rows: list[dict]) -> pd.DataFrame:
+    df = pd.DataFrame(raw_rows)
+    return df[["Ticker", "Last Price", "Net", "%1D", "_net_num", "_pct_num"]]
+
+
+def color_ticker(val):
+    return "color: #f5a623; font-weight: 600;"
+
+
+def color_pos_neg(val):
+    try:
+        v = float(val)
+    except Exception:
+        return "color: #dfe6f5;"
+    if v > 0:
+        return "color: #59d98e; font-weight: 600;"
+    if v < 0:
+        return "color: #ff6b6b; font-weight: 600;"
+    return "color: #dfe6f5;"
+
+def color_bias(val):
+    val_str = str(val).lower()
+    if "bullish" in val_str:
+        return "color: #59d98e; font-weight: 600;"
+    if "bearish" in val_str:
+        return "color: #ff6b6b; font-weight: 600;"
+    return "color: #f1c75b; font-weight: 600;"
+
+
+def style_market_table(df: pd.DataFrame):
+    display_df = df[["Ticker", "Last Price", "Net", "%1D"]].copy()
+    styler = display_df.style
+
+    styler = styler.applymap(color_ticker, subset=["Ticker"])
+
+    if "_net_num" in df.columns:
+        net_colors = [color_pos_neg(v) for v in df["_net_num"]]
+        styler = styler.apply(lambda _: net_colors, subset=["Net"], axis=0)
+
+    if "_pct_num" in df.columns:
+        pct_colors = [color_pos_neg(v) for v in df["_pct_num"]]
+        styler = styler.apply(lambda _: pct_colors, subset=["%1D"], axis=0)
+
+    styler = styler.format({"Last Price": "{:,.1f}"}, na_rep="")
+    return styler
+
+
+def style_market_table_int(df: pd.DataFrame):
+    display_df = df[["Ticker", "Last Price", "Net", "%1D"]].copy()
+    styler = display_df.style
+
+    styler = styler.applymap(color_ticker, subset=["Ticker"])
+
+    if "_net_num" in df.columns:
+        net_colors = [color_pos_neg(v) for v in df["_net_num"]]
+        styler = styler.apply(lambda _: net_colors, subset=["Net"], axis=0)
+
+    if "_pct_num" in df.columns:
+        pct_colors = [color_pos_neg(v) for v in df["_pct_num"]]
+        styler = styler.apply(lambda _: pct_colors, subset=["%1D"], axis=0)
+
+    styler = styler.format({"Last Price": "{:,.0f}"}, na_rep="")
+    return styler
+
+
 def style_indicator_table(df: pd.DataFrame):
-    """
-    Styling for Softs / Grains & Oilseeds tables.
-    Uses hidden numeric helper columns for color styling.
-    """
     display_df = df[["Variable", "Last", "Intensity (%)", "DOD", "WOW", "Bias"]].copy()
     styler = display_df.style
 
@@ -415,40 +299,11 @@ def style_indicator_table(df: pd.DataFrame):
             "Intensity (%)": "{:.1f}",
         }
     )
-
     return styler
 
-# ------------------------------------------------------------
-# STYLE FOR SIGNAL BREAKDOWN
-# ------------------------------------------------------------
-def style_signal_table(df: pd.DataFrame):
-    """
-    Styling for Signal Breakdown table
-    - green/red signals
-    - proper decimal formatting
-    """
-
-    styler = (
-        df.style
-        .applymap(color_pos_neg, subset=["Signal", "Contribution"])
-        .format({
-            "Signal": "{:+.2f}",
-            "Weight": "{:.2f}",
-            "Contribution": "{:+.2f}",
-        })
-    )
-
-    return styler
-st.markdown("**Contribution to Composite Score**")
-
-st.dataframe(
-    contrib_df,
-    use_container_width=True,
-    hide_index=True,
-)
 
 # ============================================================
-# SIDEBAR — MODEL WEIGHTS (Editable by user)
+# SIDEBAR — MODEL WEIGHTS
 # ============================================================
 
 st.sidebar.markdown("## Global Weights")
@@ -488,10 +343,6 @@ Energy: {norm_global['energy']:.2f}
 Macro: {norm_global['macro']:.2f}
 """
 )
-
-# ============================================================
-# SIDEBAR — INTERNAL WEIGHTS
-# ============================================================
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("## Softs Weights")
@@ -551,7 +402,6 @@ def build_demo_core_dataset():
     rng = seeded_rng()
     idx = make_time_index(72, freq_minutes=60)
 
-    # Core cotton / macro / commodity series used by the model
     cotton = make_series(67.2, len(idx), drift=0.03, vol=0.45, rng=rng)
     dxy = make_series(103.8, len(idx), drift=-0.005, vol=0.08, rng=rng)
     bcom = make_series(135.0, len(idx), drift=0.02, vol=0.18, rng=rng)
@@ -566,14 +416,13 @@ def build_demo_core_dataset():
     soy = make_series(1200.0, len(idx), drift=0.07, vol=3.0, rng=rng)
     wheat = make_series(630.0, len(idx), drift=0.05, vol=2.0, rng=rng)
 
-    # Kept internally for score logic
     may_jul = make_series(-0.65, len(idx), drift=0.005, vol=0.06, rng=rng)
     jul_dec = make_series(1.15, len(idx), drift=-0.003, vol=0.07, rng=rng)
 
     open_int = make_series(99277, len(idx), drift=8, vol=140, rng=rng)
     volume = np.abs(make_series(23000, len(idx), drift=20, vol=1800, rng=rng))
 
-    df = pd.DataFrame(
+    return pd.DataFrame(
         {
             "CT1": cotton,
             "DXY": dxy,
@@ -594,11 +443,8 @@ def build_demo_core_dataset():
         index=idx,
     )
 
-    return df
-
 
 df = build_demo_core_dataset()
-
 latest = df.iloc[-1]
 prev = df.iloc[-2]
 week_ago = df.iloc[-6] if len(df) >= 6 else df.iloc[0]
@@ -608,75 +454,41 @@ week_ago = df.iloc[-6] if len(df) >= 6 else df.iloc[0]
 # ============================================================
 
 softs_subsignals = {
-    "sugar": normalize_change_to_signal(
-        pct_change(latest["SB1"], df["SB1"].iloc[-6]),
-        scale=2.2,
-    ),
-    "coffee": normalize_change_to_signal(
-        pct_change(latest["KC1"], df["KC1"].iloc[-6]),
-        scale=2.2,
-    ),
-    "cocoa": normalize_change_to_signal(
-        pct_change(latest["CC1"], df["CC1"].iloc[-6]),
-        scale=2.2,
-    ),
+    "sugar": normalize_change_to_signal(pct_change(latest["SB1"], df["SB1"].iloc[-6]), scale=2.2),
+    "coffee": normalize_change_to_signal(pct_change(latest["KC1"], df["KC1"].iloc[-6]), scale=2.2),
+    "cocoa": normalize_change_to_signal(pct_change(latest["CC1"], df["CC1"].iloc[-6]), scale=2.2),
 }
 
 grains_subsignals = {
-    "corn": normalize_change_to_signal(
-        pct_change(latest["C1"], df["C1"].iloc[-6]),
-        scale=2.0,
-    ),
-    "soybeans": normalize_change_to_signal(
-        pct_change(latest["S1"], df["S1"].iloc[-6]),
-        scale=2.0,
-    ),
-    "wheat": normalize_change_to_signal(
-        pct_change(latest["W1"], df["W1"].iloc[-6]),
-        scale=2.0,
-    ),
+    "corn": normalize_change_to_signal(pct_change(latest["C1"], df["C1"].iloc[-6]), scale=2.0),
+    "soybeans": normalize_change_to_signal(pct_change(latest["S1"], df["S1"].iloc[-6]), scale=2.0),
+    "wheat": normalize_change_to_signal(pct_change(latest["W1"], df["W1"].iloc[-6]), scale=2.0),
 }
-
-# ============================================================
-# AGGREGATED SUBGROUP SCORES USING EDITABLE INTERNAL WEIGHTS
-# ============================================================
 
 soft_complex_score = weighted_group_score(softs_subsignals, softs_internal_weights)
 agri_complex_score = weighted_group_score(grains_subsignals, grains_internal_weights)
 
 # ============================================================
-# MAIN SIGNALS
+# MAIN SIGNALS + COMPOSITE
 # ============================================================
 
 signals = {
     "cotton_momentum": normalize_change_to_signal(
-        pct_change(latest["CT1"], df["CT1"].iloc[-6]),
-        scale=1.8,
+        pct_change(latest["CT1"], df["CT1"].iloc[-6]), scale=1.8
     ),
     "spread_structure": normalize_change_to_signal(
-        latest["MAY_JUL"] * -12.0,
-        scale=1.0,
+        latest["MAY_JUL"] * -12.0, scale=1.0
     ),
     "soft_complex": soft_complex_score,
     "agri_complex": agri_complex_score,
     "energy": normalize_change_to_signal(
-        pct_change(latest["CL1"], df["CL1"].iloc[-6]),
-        scale=2.0,
+        pct_change(latest["CL1"], df["CL1"].iloc[-6]), scale=2.0
     ),
     "macro": np.mean(
         [
-            -normalize_change_to_signal(
-                pct_change(latest["DXY"], df["DXY"].iloc[-6]),
-                scale=0.8,
-            ),
-            normalize_change_to_signal(
-                pct_change(latest["BCOM"], df["BCOM"].iloc[-6]),
-                scale=1.5,
-            ),
-            normalize_change_to_signal(
-                pct_change(latest["BCOMAG"], df["BCOMAG"].iloc[-6]),
-                scale=1.2,
-            ),
+            -normalize_change_to_signal(pct_change(latest["DXY"], df["DXY"].iloc[-6]), scale=0.8),
+            normalize_change_to_signal(pct_change(latest["BCOM"], df["BCOM"].iloc[-6]), scale=1.5),
+            normalize_change_to_signal(pct_change(latest["BCOMAG"], df["BCOMAG"].iloc[-6]), scale=1.2),
         ]
     ),
 }
@@ -684,25 +496,27 @@ signals = {
 composite_score = weighted_composite_score(signals, weights)
 signal_label = classify_score(composite_score)
 
-# ============================================================
-# CONTRIBUTION BY BLOCK (for transparency)
-# ============================================================
+pretty_block_names = {
+    "cotton_momentum": "Cotton Momentum",
+    "spread_structure": "Spread Structure",
+    "soft_complex": "Soft Complex",
+    "agri_complex": "Grains & Oilseeds",
+    "energy": "Energy",
+    "macro": "Macro",
+}
 
 contrib_rows = []
 for k, v in signals.items():
-    contrib_rows.append({
-        "Block": k,
-        "Signal": v,
-        "Weight": weights[k],
-        "Contribution": v * weights[k]
-    })
+    contrib_rows.append(
+        {
+            "Block": pretty_block_names.get(k, k),
+            "Signal": round(v, 2),
+            "Weight": round(weights[k], 2),
+            "Contribution": round(v * weights[k], 2),
+        }
+    )
 
-contrib_df = pd.DataFrame(contrib_rows)
-contrib_df = contrib_df.sort_values("Contribution", ascending=False)
-
-# ============================================================
-# COMPOSITE SCORE VISUAL DIRECTION / COLOR
-# ============================================================
+contrib_df = pd.DataFrame(contrib_rows).sort_values("Contribution", ascending=False).reset_index(drop=True)
 
 if composite_score > 0:
     score_css_class = "score-bullish"
@@ -715,7 +529,7 @@ else:
     score_direction = "→ Neutral"
 
 # ============================================================
-# MARKET SNAPSHOT FOR "COTTON #2 INDICATORS"
+# COTTON #2 INDICATORS DATA
 # ============================================================
 
 softs_snapshot = {
@@ -757,25 +571,18 @@ grains_snapshot = {
 
 def build_indicator_df(snapshot_dict: dict[str, dict]) -> pd.DataFrame:
     rows = []
-
-    # 1) Build raw rows with a raw intensity score
     for name, item in snapshot_dict.items():
         direction = "Bullish" if item["wow_pct"] > 0 else "Bearish" if item["wow_pct"] < 0 else "Neutral"
         bias_arrow = "↑" if direction == "Bullish" else "↓" if direction == "Bearish" else "→"
-
         raw_intensity = abs(item["wow_pct"])
 
         rows.append(
             {
                 "Variable": name,
                 "Last": round(item["last"], 2),
-
-                # display columns
                 "DOD": format_arrow_value(item["dod_pct"], 2) + "%",
                 "WOW": format_arrow_value(item["wow_pct"], 2) + "%",
                 "Bias": f"{bias_arrow} {direction}",
-
-                # hidden numeric helper columns
                 "_dod_num": round(item["dod_pct"], 2),
                 "_wow_num": round(item["wow_pct"], 2),
                 "_bias_text": direction,
@@ -783,18 +590,15 @@ def build_indicator_df(snapshot_dict: dict[str, dict]) -> pd.DataFrame:
             }
         )
 
-    df = pd.DataFrame(rows)
-
-    # 2) Convert raw intensity into weights summing to 100%
-    total_intensity = df["_raw_intensity"].sum()
+    df_out = pd.DataFrame(rows)
+    total_intensity = df_out["_raw_intensity"].sum()
 
     if total_intensity == 0:
-        df["Intensity (%)"] = round(100 / len(df), 1)
+        df_out["Intensity (%)"] = round(100 / len(df_out), 1)
     else:
-        df["Intensity (%)"] = (df["_raw_intensity"] / total_intensity * 100).round(1)
+        df_out["Intensity (%)"] = (df_out["_raw_intensity"] / total_intensity * 100).round(1)
 
-    # reorder
-    df = df[
+    df_out = df_out[
         [
             "Variable",
             "Last",
@@ -807,23 +611,17 @@ def build_indicator_df(snapshot_dict: dict[str, dict]) -> pd.DataFrame:
             "_bias_text",
         ]
     ]
-
-    return df.sort_values("Intensity (%)", ascending=False).reset_index(drop=True)
+    return df_out.sort_values("Intensity (%)", ascending=False).reset_index(drop=True)
 
 
 softs_indicator_df = build_indicator_df(softs_snapshot)
 grains_indicator_df = build_indicator_df(grains_snapshot)
 
 # ============================================================
-# HELPERS FOR MARKET MONITOR TABLES
+# MARKET MONITOR TABLE BUILDERS
 # ============================================================
 
 def make_quote(ticker: str, last: float, prev_value: float | None = None, decimals: int = 1) -> dict:
-    """
-    Standard quote row used in all Bloomberg-style monitor tables.
-    Adds arrows for Net and %1D, while keeping numeric helper columns
-    for styling.
-    """
     if prev_value is None:
         prev_value = last * 0.99
 
@@ -836,12 +634,8 @@ def make_quote(ticker: str, last: float, prev_value: float | None = None, decima
     return {
         "Ticker": ticker,
         "Last Price": round(last, decimals),
-
-        # display columns
         "Net": f"{net_arrow} {net:,.{decimals}f}",
         "%1D": f"{pct_arrow} {pct:,.1f}",
-
-        # helper numeric columns for styling
         "_net_num": net,
         "_pct_num": pct,
     }
@@ -854,9 +648,6 @@ def simulated_quote_from_base(
     pct_vol: float = 1.8,
     decimals: int = 1,
 ) -> dict:
-    """
-    Creates a simulated quote around a base value.
-    """
     prev_val = base * (1 + rng.normal(0, pct_vol / 100))
     last_val = base * (1 + rng.normal(0, pct_vol / 100))
     return make_quote(ticker, last_val, prev_val, decimals=decimals)
@@ -864,24 +655,14 @@ def simulated_quote_from_base(
 
 @st.cache_data(ttl=120, show_spinner=False)
 def build_market_monitor_tables():
-    """
-    Creates Bloomberg-style monitor tables using simulated but coherent data.
-    We reuse some values from the core dataset where relevant.
-    """
     rng = seeded_rng()
 
-    # --------------------------------------------------------
-    # EUROPE / US - broad commodity block
-    # --------------------------------------------------------
     broad_rows = [
         make_quote("BCOM", latest["BCOM"], prev["BCOM"], decimals=0),
         make_quote("BCOMAG", latest["BCOMAG"], prev["BCOMAG"], decimals=0),
         simulated_quote_from_base(rng, "XBTUSD", 68787, pct_vol=2.5, decimals=0),
     ]
 
-    # --------------------------------------------------------
-    # EUROPE / US - energy
-    # --------------------------------------------------------
     energy_rows = [
         make_quote("CL1", latest["CL1"], prev["CL1"], decimals=0),
         simulated_quote_from_base(rng, "CO1", 102, pct_vol=2.0, decimals=0),
@@ -893,9 +674,6 @@ def build_market_monitor_tables():
         simulated_quote_from_base(rng, "TZT1", 160, pct_vol=2.5, decimals=0),
     ]
 
-    # --------------------------------------------------------
-    # EUROPE / US - metals
-    # --------------------------------------------------------
     metals_rows = [
         simulated_quote_from_base(rng, "XAU", 5102, pct_vol=1.5, decimals=0),
         simulated_quote_from_base(rng, "XAG", 85, pct_vol=1.7, decimals=0),
@@ -911,9 +689,6 @@ def build_market_monitor_tables():
         simulated_quote_from_base(rng, "HG1", 569, pct_vol=1.8, decimals=0),
     ]
 
-    # --------------------------------------------------------
-    # EUROPE / US - agriculture / softs
-    # --------------------------------------------------------
     ag_rows = [
         make_quote("W1", latest["W1"], prev["W1"], decimals=0),
         make_quote("C1", latest["C1"], prev["C1"], decimals=0),
@@ -926,9 +701,6 @@ def build_market_monitor_tables():
         make_quote("CT1", latest["CT1"], prev["CT1"], decimals=0),
     ]
 
-    # --------------------------------------------------------
-    # CHINA commodities
-    # --------------------------------------------------------
     china_energy_rows = [
         simulated_quote_from_base(rng, "SCP1", 796, pct_vol=2.0, decimals=0),
         simulated_quote_from_base(rng, "F01", 4790, pct_vol=2.0, decimals=0),
@@ -964,9 +736,6 @@ def build_market_monitor_tables():
         simulated_quote_from_base(rng, "SRB1", 13550, pct_vol=1.6, decimals=0),
     ]
 
-    # --------------------------------------------------------
-    # OVERVIEW INDICES
-    # --------------------------------------------------------
     asia_rows = [
         simulated_quote_from_base(rng, "STI", 4757, pct_vol=1.5, decimals=0),
         simulated_quote_from_base(rng, "HSI", 25408, pct_vol=1.4, decimals=0),
@@ -1148,19 +917,12 @@ with top4:
 # MAIN MARKET MONITOR LAYOUT
 # ============================================================
 
-# ------------------------------------------------------------
-# FIRST ROW:
-# Cotton #2 Indicators + Signal Breakdown side by side
-# ------------------------------------------------------------
 top_left, top_right = st.columns([0.62, 0.38], gap="large")
 
 with top_left:
     st.markdown('<div class="table-card">', unsafe_allow_html=True)
     st.markdown('<div class="section-title">Cotton #2 Indicators</div>', unsafe_allow_html=True)
 
-    # --------------------------------------------------------
-    # Softs section
-    # --------------------------------------------------------
     softs_avg_intensity = softs_indicator_df["Intensity (%)"].sum().round(0)
     softs_wow_mean = softs_indicator_df["_wow_num"].mean()
     softs_avg_bias = "Bullish" if softs_wow_mean > 0 else "Bearish" if softs_wow_mean < 0 else "Neutral"
@@ -1186,9 +948,6 @@ with top_left:
 
     st.markdown("<div style='height: 18px;'></div>", unsafe_allow_html=True)
 
-    # --------------------------------------------------------
-    # Grains & Oilseeds section
-    # --------------------------------------------------------
     grains_avg_intensity = grains_indicator_df["Intensity (%)"].sum().round(0)
     grains_wow_mean = grains_indicator_df["_wow_num"].mean()
     grains_avg_bias = "Bullish" if grains_wow_mean > 0 else "Bearish" if grains_wow_mean < 0 else "Neutral"
@@ -1225,16 +984,11 @@ with top_right:
     ]
     signal_df = pd.DataFrame(signal_rows)
 
-    # intensity must sum to 100
     signal_df["Intensity (%)"] = (signal_df["Weight"] / signal_df["Weight"].sum() * 100).round(1)
-
-    # DOD / WOW style proxy fields for display consistency
     signal_df["_dod_num"] = signal_df["Last"].round(2)
     signal_df["_wow_num"] = (signal_df["Last"] * signal_df["Weight"]).round(2)
-
     signal_df["DOD"] = signal_df["_dod_num"].apply(lambda x: format_arrow_value(x, 2))
     signal_df["WOW"] = signal_df["_wow_num"].apply(lambda x: format_arrow_value(x, 2))
-
     signal_df["_bias_text"] = signal_df["Last"].apply(
         lambda x: "Bullish" if x > 0 else "Bearish" if x < 0 else "Neutral"
     )
@@ -1256,22 +1010,12 @@ with top_right:
     )
     st.markdown('</div>', unsafe_allow_html=True)
 
-# ------------------------------------------------------------
-# SECOND ROW:
-# Europe / US Commodities + China Commodities side by side
-# ------------------------------------------------------------
 mid_left, mid_right = st.columns([0.5, 0.5], gap="large")
 
 with mid_left:
     st.markdown('<div class="table-card">', unsafe_allow_html=True)
     st.markdown('<div class="section-title">Overview Commodity</div>', unsafe_allow_html=True)
 
-
-    # --------------------------------------------------------
-    # Top layout inside Overview Commodity:
-    # LEFT  = Broad
-    # RIGHT = Energy (top) + Metals (bottom)
-    # --------------------------------------------------------
     overview_left, overview_right = st.columns([0.48, 0.52], gap="large")
 
     with overview_left:
@@ -1300,9 +1044,6 @@ with mid_left:
             height=455,
         )
 
-    # --------------------------------------------------------
-    # Bottom full-width table
-    # --------------------------------------------------------
     st.markdown("**Agriculture / Softs**")
     st.dataframe(
         style_market_table(market_tables["agriculture"]),
@@ -1343,18 +1084,10 @@ with mid_right:
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-# ============================================================
-# OVERVIEW INDICES SECTION
-# ============================================================
-
 st.divider()
 
 st.markdown('<div class="table-card">', unsafe_allow_html=True)
 st.markdown('<div class="section-title">Overview Indices</div>', unsafe_allow_html=True)
-st.markdown(
-    '<div class="section-subtitle">Global equity index monitor inspired by Bloomberg Overview Indices.</div>',
-    unsafe_allow_html=True,
-)
 
 idx_col1, idx_col2, idx_col3 = st.columns(3)
 
@@ -1386,10 +1119,6 @@ with idx_col3:
     )
 
 st.markdown('</div>', unsafe_allow_html=True)
-
-# ============================================================
-# BOTTOM DRIVER SUMMARY
-# ============================================================
 
 st.divider()
 
