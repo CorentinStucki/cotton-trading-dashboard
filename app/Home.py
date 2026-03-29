@@ -31,6 +31,35 @@ st.set_page_config(
 )
 
 # ============================================================
+# SIDEBAR — MODEL WEIGHTS (Editable by user)
+# ============================================================
+
+st.sidebar.markdown("## Model Weights")
+
+w_cotton = st.sidebar.number_input("Cotton Momentum", 0.0, 1.0, 0.28, 0.01)
+w_spread = st.sidebar.number_input("Spread Structure", 0.0, 1.0, 0.20, 0.01)
+w_softs = st.sidebar.number_input("Soft Complex", 0.0, 1.0, 0.16, 0.01)
+w_agri = st.sidebar.number_input("Agri Complex", 0.0, 1.0, 0.14, 0.01)
+w_energy = st.sidebar.number_input("Energy", 0.0, 1.0, 0.12, 0.01)
+w_macro = st.sidebar.number_input("Macro", 0.0, 1.0, 0.10, 0.01)
+
+weights = {
+    "cotton_momentum": w_cotton,
+    "spread_structure": w_spread,
+    "soft_complex": w_softs,
+    "agri_complex": w_agri,
+    "energy": w_energy,
+    "macro": w_macro,
+}
+
+total_weight = sum(weights.values())
+
+st.sidebar.markdown(f"**Total weight = {total_weight:.2f}**")
+
+if total_weight != 1.0:
+    st.sidebar.warning("Total should be 1.00")
+
+# ============================================================
 # STYLING
 # ============================================================
 st.markdown(
@@ -521,15 +550,6 @@ signals = {
             normalize_change_to_signal(pct_change(latest["BCOMAG"], df["BCOMAG"].iloc[-6]), scale=1.2),
         ]
     ),
-}
-
-weights = {
-    "cotton_momentum": 0.28,
-    "spread_structure": 0.20,
-    "soft_complex": 0.16,
-    "agri_complex": 0.14,
-    "energy": 0.12,
-    "macro": 0.10,
 }
 
 composite_score = weighted_composite_score(signals, weights)
