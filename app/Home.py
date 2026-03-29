@@ -30,100 +30,6 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# ============================================================
-# SIDEBAR — MODEL WEIGHTS (Editable by user)
-# ============================================================
-
-st.sidebar.markdown("## Global Weights")
-
-w_cotton = st.sidebar.number_input("Cotton Momentum", 0.0, 1.0, 0.28, 0.01)
-w_spread = st.sidebar.number_input("Spread Structure", 0.0, 1.0, 0.20, 0.01)
-w_softs = st.sidebar.number_input("Soft Complex", 0.0, 1.0, 0.16, 0.01)
-w_agri = st.sidebar.number_input("Agri Complex", 0.0, 1.0, 0.14, 0.01)
-w_energy = st.sidebar.number_input("Energy", 0.0, 1.0, 0.12, 0.01)
-w_macro = st.sidebar.number_input("Macro", 0.0, 1.0, 0.10, 0.01)
-
-weights = {
-    "cotton_momentum": w_cotton,
-    "spread_structure": w_spread,
-    "soft_complex": w_softs,
-    "agri_complex": w_agri,
-    "energy": w_energy,
-    "macro": w_macro,
-}
-
-total_weight = sum(weights.values())
-st.sidebar.markdown(f"**Total weight = {total_weight:.2f}**")
-
-if abs(total_weight - 1.0) > 0.001:
-    st.sidebar.warning("Total should be 1.00")
-
-norm_global = normalize_weights(weights)
-
-st.sidebar.markdown(
-    f"""
-**Normalized global weights**  
-Cotton: {norm_global['cotton_momentum']:.2f}  
-Spread: {norm_global['spread_structure']:.2f}  
-Softs: {norm_global['soft_complex']:.2f}  
-Grains: {norm_global['agri_complex']:.2f}  
-Energy: {norm_global['energy']:.2f}  
-Macro: {norm_global['macro']:.2f}
-"""
-)
-
-# ============================================================
-# SIDEBAR — INTERNAL WEIGHTS
-# ============================================================
-
-st.sidebar.markdown("---")
-st.sidebar.markdown("## Softs Weights")
-
-w_sugar = st.sidebar.number_input("Sugar", 0.0, 10.0, 0.33, 0.01, key="w_sugar")
-w_coffee = st.sidebar.number_input("Coffee", 0.0, 10.0, 0.33, 0.01, key="w_coffee")
-w_cocoa = st.sidebar.number_input("Cocoa", 0.0, 10.0, 0.34, 0.01, key="w_cocoa")
-
-softs_internal_weights = {
-    "sugar": w_sugar,
-    "coffee": w_coffee,
-    "cocoa": w_cocoa,
-}
-
-softs_internal_total = sum(softs_internal_weights.values())
-st.sidebar.markdown(f"**Softs total = {softs_internal_total:.2f}**")
-if softs_internal_total <= 0:
-    st.sidebar.warning("Softs total should be > 0")
-
-st.sidebar.markdown("---")
-st.sidebar.markdown("## Grains & Oilseeds Weights")
-
-w_corn = st.sidebar.number_input("Corn", 0.0, 10.0, 0.34, 0.01, key="w_corn")
-w_soybeans = st.sidebar.number_input("Soybeans", 0.0, 10.0, 0.33, 0.01, key="w_soybeans")
-w_wheat = st.sidebar.number_input("Wheat", 0.0, 10.0, 0.33, 0.01, key="w_wheat")
-
-grains_internal_weights = {
-    "corn": w_corn,
-    "soybeans": w_soybeans,
-    "wheat": w_wheat,
-}
-
-grains_internal_total = sum(grains_internal_weights.values())
-st.sidebar.markdown(f"**Grains total = {grains_internal_total:.2f}**")
-if grains_internal_total <= 0:
-    st.sidebar.warning("Grains total should be > 0")
-
-st.sidebar.markdown("---")
-st.sidebar.markdown("### Normalized Internal Weights")
-
-norm_softs = normalize_weights(softs_internal_weights)
-norm_grains = normalize_weights(grains_internal_weights)
-
-st.sidebar.markdown(
-    f"**Softs** — Sugar: {norm_softs['sugar']:.2f}, Coffee: {norm_softs['coffee']:.2f}, Cocoa: {norm_softs['cocoa']:.2f}"
-)
-st.sidebar.markdown(
-    f"**Grains** — Corn: {norm_grains['corn']:.2f}, Soybeans: {norm_grains['soybeans']:.2f}, Wheat: {norm_grains['wheat']:.2f}"
-)
 
 # ============================================================
 # STYLING
@@ -539,6 +445,101 @@ st.dataframe(
     contrib_df,
     use_container_width=True,
     hide_index=True,
+)
+
+# ============================================================
+# SIDEBAR — MODEL WEIGHTS (Editable by user)
+# ============================================================
+
+st.sidebar.markdown("## Global Weights")
+
+w_cotton = st.sidebar.number_input("Cotton Momentum", 0.0, 1.0, 0.28, 0.01)
+w_spread = st.sidebar.number_input("Spread Structure", 0.0, 1.0, 0.20, 0.01)
+w_softs = st.sidebar.number_input("Soft Complex", 0.0, 1.0, 0.16, 0.01)
+w_agri = st.sidebar.number_input("Agri Complex", 0.0, 1.0, 0.14, 0.01)
+w_energy = st.sidebar.number_input("Energy", 0.0, 1.0, 0.12, 0.01)
+w_macro = st.sidebar.number_input("Macro", 0.0, 1.0, 0.10, 0.01)
+
+weights = {
+    "cotton_momentum": w_cotton,
+    "spread_structure": w_spread,
+    "soft_complex": w_softs,
+    "agri_complex": w_agri,
+    "energy": w_energy,
+    "macro": w_macro,
+}
+
+total_weight = sum(weights.values())
+st.sidebar.markdown(f"**Total weight = {total_weight:.2f}**")
+
+if abs(total_weight - 1.0) > 0.001:
+    st.sidebar.warning("Total should be 1.00")
+
+norm_global = normalize_weights(weights)
+
+st.sidebar.markdown(
+    f"""
+**Normalized global weights**  
+Cotton: {norm_global['cotton_momentum']:.2f}  
+Spread: {norm_global['spread_structure']:.2f}  
+Softs: {norm_global['soft_complex']:.2f}  
+Grains: {norm_global['agri_complex']:.2f}  
+Energy: {norm_global['energy']:.2f}  
+Macro: {norm_global['macro']:.2f}
+"""
+)
+
+# ============================================================
+# SIDEBAR — INTERNAL WEIGHTS
+# ============================================================
+
+st.sidebar.markdown("---")
+st.sidebar.markdown("## Softs Weights")
+
+w_sugar = st.sidebar.number_input("Sugar", 0.0, 10.0, 0.33, 0.01, key="w_sugar")
+w_coffee = st.sidebar.number_input("Coffee", 0.0, 10.0, 0.33, 0.01, key="w_coffee")
+w_cocoa = st.sidebar.number_input("Cocoa", 0.0, 10.0, 0.34, 0.01, key="w_cocoa")
+
+softs_internal_weights = {
+    "sugar": w_sugar,
+    "coffee": w_coffee,
+    "cocoa": w_cocoa,
+}
+
+softs_internal_total = sum(softs_internal_weights.values())
+st.sidebar.markdown(f"**Softs total = {softs_internal_total:.2f}**")
+if softs_internal_total <= 0:
+    st.sidebar.warning("Softs total should be > 0")
+
+st.sidebar.markdown("---")
+st.sidebar.markdown("## Grains & Oilseeds Weights")
+
+w_corn = st.sidebar.number_input("Corn", 0.0, 10.0, 0.34, 0.01, key="w_corn")
+w_soybeans = st.sidebar.number_input("Soybeans", 0.0, 10.0, 0.33, 0.01, key="w_soybeans")
+w_wheat = st.sidebar.number_input("Wheat", 0.0, 10.0, 0.33, 0.01, key="w_wheat")
+
+grains_internal_weights = {
+    "corn": w_corn,
+    "soybeans": w_soybeans,
+    "wheat": w_wheat,
+}
+
+grains_internal_total = sum(grains_internal_weights.values())
+st.sidebar.markdown(f"**Grains total = {grains_internal_total:.2f}**")
+if grains_internal_total <= 0:
+    st.sidebar.warning("Grains total should be > 0")
+
+st.sidebar.markdown("---")
+st.sidebar.markdown("### Normalized Internal Weights")
+
+norm_softs = normalize_weights(softs_internal_weights)
+norm_grains = normalize_weights(grains_internal_weights)
+
+st.sidebar.markdown(
+    f"**Softs** — Sugar: {norm_softs['sugar']:.2f}, Coffee: {norm_softs['coffee']:.2f}, Cocoa: {norm_softs['cocoa']:.2f}"
+)
+st.sidebar.markdown(
+    f"**Grains** — Corn: {norm_grains['corn']:.2f}, Soybeans: {norm_grains['soybeans']:.2f}, Wheat: {norm_grains['wheat']:.2f}"
 )
 
 # ============================================================
