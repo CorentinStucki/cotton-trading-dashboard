@@ -34,7 +34,7 @@ st.set_page_config(
 # SIDEBAR — MODEL WEIGHTS (Editable by user)
 # ============================================================
 
-st.sidebar.markdown("## Model Weights")
+st.sidebar.markdown("## Global Weights")
 
 w_cotton = st.sidebar.number_input("Cotton Momentum", 0.0, 1.0, 0.28, 0.01)
 w_spread = st.sidebar.number_input("Spread Structure", 0.0, 1.0, 0.20, 0.01)
@@ -53,11 +53,77 @@ weights = {
 }
 
 total_weight = sum(weights.values())
-
 st.sidebar.markdown(f"**Total weight = {total_weight:.2f}**")
 
-if total_weight != 1.0:
+if abs(total_weight - 1.0) > 0.001:
     st.sidebar.warning("Total should be 1.00")
+
+norm_global = normalize_weights(weights)
+
+st.sidebar.markdown(
+    f"""
+**Normalized global weights**  
+Cotton: {norm_global['cotton_momentum']:.2f}  
+Spread: {norm_global['spread_structure']:.2f}  
+Softs: {norm_global['soft_complex']:.2f}  
+Grains: {norm_global['agri_complex']:.2f}  
+Energy: {norm_global['energy']:.2f}  
+Macro: {norm_global['macro']:.2f}
+"""
+)
+
+# ============================================================
+# SIDEBAR — INTERNAL WEIGHTS
+# ============================================================
+
+st.sidebar.markdown("---")
+st.sidebar.markdown("## Softs Weights")
+
+w_sugar = st.sidebar.number_input("Sugar", 0.0, 10.0, 0.33, 0.01, key="w_sugar")
+w_coffee = st.sidebar.number_input("Coffee", 0.0, 10.0, 0.33, 0.01, key="w_coffee")
+w_cocoa = st.sidebar.number_input("Cocoa", 0.0, 10.0, 0.34, 0.01, key="w_cocoa")
+
+softs_internal_weights = {
+    "sugar": w_sugar,
+    "coffee": w_coffee,
+    "cocoa": w_cocoa,
+}
+
+softs_internal_total = sum(softs_internal_weights.values())
+st.sidebar.markdown(f"**Softs total = {softs_internal_total:.2f}**")
+if softs_internal_total <= 0:
+    st.sidebar.warning("Softs total should be > 0")
+
+st.sidebar.markdown("---")
+st.sidebar.markdown("## Grains & Oilseeds Weights")
+
+w_corn = st.sidebar.number_input("Corn", 0.0, 10.0, 0.34, 0.01, key="w_corn")
+w_soybeans = st.sidebar.number_input("Soybeans", 0.0, 10.0, 0.33, 0.01, key="w_soybeans")
+w_wheat = st.sidebar.number_input("Wheat", 0.0, 10.0, 0.33, 0.01, key="w_wheat")
+
+grains_internal_weights = {
+    "corn": w_corn,
+    "soybeans": w_soybeans,
+    "wheat": w_wheat,
+}
+
+grains_internal_total = sum(grains_internal_weights.values())
+st.sidebar.markdown(f"**Grains total = {grains_internal_total:.2f}**")
+if grains_internal_total <= 0:
+    st.sidebar.warning("Grains total should be > 0")
+
+st.sidebar.markdown("---")
+st.sidebar.markdown("### Normalized Internal Weights")
+
+norm_softs = normalize_weights(softs_internal_weights)
+norm_grains = normalize_weights(grains_internal_weights)
+
+st.sidebar.markdown(
+    f"**Softs** — Sugar: {norm_softs['sugar']:.2f}, Coffee: {norm_softs['coffee']:.2f}, Cocoa: {norm_softs['cocoa']:.2f}"
+)
+st.sidebar.markdown(
+    f"**Grains** — Corn: {norm_grains['corn']:.2f}, Soybeans: {norm_grains['soybeans']:.2f}, Wheat: {norm_grains['wheat']:.2f}"
+)
 
 # ============================================================
 # STYLING
@@ -258,6 +324,25 @@ def format_last(value: float, decimals: int = 2) -> str:
     """
     return f"{value:,.{decimals}f}"
 
+def normalize_weights(weight_dict: dict[str, float]) -> dict[str, float]:
+    """
+    Normalize a dict of weights so the total sums to 1.
+    If total is 0, fallback to equal weights.
+    """
+    total = sum(weight_dict.values())
+    if total <= 0:
+        n = len(weight_dict)
+        return {k: 1 / n for k in weight_dict}
+    return {k: v / total for k, v in weight_dict.items()}
+
+
+def weighted_group_score(signal_dict: dict[str, float], weight_dict: dict[str, float]) -> float:
+    """
+    Compute a weighted average score for a subgroup.
+    Weights are normalized automatically for robustness.
+    """
+    norm_weights = normalize_weights(weight_dict)
+    return sum(signal_dict[k] * norm_weights[k] for k in signal_dict if k in norm_weights)
 
 def build_quote_rows(raw_rows: list[dict]) -> pd.DataFrame:
     """
@@ -448,7 +533,13 @@ def style_signal_table(df: pd.DataFrame):
     )
 
     return styler
+st.markdown("**Contribution to Composite Score**")
 
+st.dataframe(
+    contrib_df,
+    use_container_width=True,
+    hide_index=True,
+)
 
 # ============================================================
 # BUILD THE CORE SIMULATED DATASET
@@ -512,7 +603,48 @@ prev = df.iloc[-2]
 week_ago = df.iloc[-6] if len(df) >= 6 else df.iloc[0]
 
 # ============================================================
-# COMPOSITE SCORE LOGIC
+# RAW SUB-SIGNALS FOR INTERNAL GROUPS
+# ============================================================
+
+softs_subsignals = {
+    "sugar": normalize_change_to_signal(
+        pct_change(latest["SB1"], df["SB1"].iloc[-6]),
+        scale=2.2,
+    ),
+    "coffee": normalize_change_to_signal(
+        pct_change(latest["KC1"], df["KC1"].iloc[-6]),
+        scale=2.2,
+    ),
+    "cocoa": normalize_change_to_signal(
+        pct_change(latest["CC1"], df["CC1"].iloc[-6]),
+        scale=2.2,
+    ),
+}
+
+grains_subsignals = {
+    "corn": normalize_change_to_signal(
+        pct_change(latest["C1"], df["C1"].iloc[-6]),
+        scale=2.0,
+    ),
+    "soybeans": normalize_change_to_signal(
+        pct_change(latest["S1"], df["S1"].iloc[-6]),
+        scale=2.0,
+    ),
+    "wheat": normalize_change_to_signal(
+        pct_change(latest["W1"], df["W1"].iloc[-6]),
+        scale=2.0,
+    ),
+}
+
+# ============================================================
+# AGGREGATED SUBGROUP SCORES USING EDITABLE INTERNAL WEIGHTS
+# ============================================================
+
+soft_complex_score = weighted_group_score(softs_subsignals, softs_internal_weights)
+agri_complex_score = weighted_group_score(grains_subsignals, grains_internal_weights)
+
+# ============================================================
+# MAIN SIGNALS
 # ============================================================
 
 signals = {
@@ -524,36 +656,48 @@ signals = {
         latest["MAY_JUL"] * -12.0,
         scale=1.0,
     ),
-    "soft_complex": np.mean(
-        [
-            normalize_change_to_signal(pct_change(latest["SB1"], df["SB1"].iloc[-6]), scale=2.2),
-            normalize_change_to_signal(pct_change(latest["KC1"], df["KC1"].iloc[-6]), scale=2.2),
-            normalize_change_to_signal(pct_change(latest["CC1"], df["CC1"].iloc[-6]), scale=2.2),
-        ]
-    ),
-    "agri_complex": np.mean(
-        [
-            normalize_change_to_signal(pct_change(latest["C1"], df["C1"].iloc[-6]), scale=2.0),
-            normalize_change_to_signal(pct_change(latest["S1"], df["S1"].iloc[-6]), scale=2.0),
-            normalize_change_to_signal(pct_change(latest["W1"], df["W1"].iloc[-6]), scale=2.0),
-        ]
-    ),
+    "soft_complex": soft_complex_score,
+    "agri_complex": agri_complex_score,
     "energy": normalize_change_to_signal(
         pct_change(latest["CL1"], df["CL1"].iloc[-6]),
         scale=2.0,
     ),
     "macro": np.mean(
         [
-            # Rising DXY is bearish for cotton
-            -normalize_change_to_signal(pct_change(latest["DXY"], df["DXY"].iloc[-6]), scale=0.8),
-            normalize_change_to_signal(pct_change(latest["BCOM"], df["BCOM"].iloc[-6]), scale=1.5),
-            normalize_change_to_signal(pct_change(latest["BCOMAG"], df["BCOMAG"].iloc[-6]), scale=1.2),
+            -normalize_change_to_signal(
+                pct_change(latest["DXY"], df["DXY"].iloc[-6]),
+                scale=0.8,
+            ),
+            normalize_change_to_signal(
+                pct_change(latest["BCOM"], df["BCOM"].iloc[-6]),
+                scale=1.5,
+            ),
+            normalize_change_to_signal(
+                pct_change(latest["BCOMAG"], df["BCOMAG"].iloc[-6]),
+                scale=1.2,
+            ),
         ]
     ),
 }
 
 composite_score = weighted_composite_score(signals, weights)
 signal_label = classify_score(composite_score)
+
+# ============================================================
+# CONTRIBUTION BY BLOCK (for transparency)
+# ============================================================
+
+contrib_rows = []
+for k, v in signals.items():
+    contrib_rows.append({
+        "Block": k,
+        "Signal": v,
+        "Weight": weights[k],
+        "Contribution": v * weights[k]
+    })
+
+contrib_df = pd.DataFrame(contrib_rows)
+contrib_df = contrib_df.sort_values("Contribution", ascending=False)
 
 # ============================================================
 # COMPOSITE SCORE VISUAL DIRECTION / COLOR
