@@ -13,6 +13,8 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
+import json
+import requests
 
 from data.scoring import (
     classify_score,
@@ -204,7 +206,7 @@ def normalize_weights(weight_dict: dict[str, float]) -> dict[str, float]:
 
 def weighted_group_score(signal_dict: dict[str, float], weight_dict: dict[str, float]) -> float:
     norm_weights = normalize_weights(weight_dict)
-    return sum(signal_dict[k] * norm_weights[k] for k in signal_dict if k in norm_weights)
+    return sum(signal_dict[k] * norm_norm_global[k] for k in signal_dict if k in norm_weights)
 
 
 def format_arrow_value(value: float, decimals: int = 2) -> str:
@@ -301,19 +303,185 @@ def style_indicator_table(df: pd.DataFrame):
     )
     return styler
 
+# ============================================================
+# PERSISTENT WEIGHTS STORAGE (SUPABASE)
+# ============================================================
+
+DEFAULT_WEIGHTS_CONFIG = {
+    "global": {
+        "cotton_momentum": 0.28,
+        "spread_structure": 0.20,
+        "soft_complex": 0.16,
+        "agri_complex": 0.14,
+        "energy": 0.12,
+        "macro": 0.10,
+    },
+    "softs": {
+        "sugar": 0.33,
+        "coffee": 0.33,
+        "cocoa": 0.34,
+    },
+    "grains": {
+        "corn": 0.34,
+        "soybeans": 0.33,
+        "wheat": 0.33,
+    },
+}
+
+
+def get_supabase_config():
+    url = st.secrets.get("SUPABASE_URL", "")
+    key = st.secrets.get("SUPABASE_KEY", "")
+    profile = st.secrets.get("WEIGHTS_PROFILE", "default")
+    return url, key, profile
+
+
+def load_weights_from_store() -> dict:
+    """
+    Load weights from Supabase.
+    Falls back to defaults if unavailable.
+    """
+    url, key, profile = get_supabase_config()
+
+    if not url or not key:
+        return DEFAULT_WEIGHTS_CONFIG.copy()
+
+    endpoint = f"{url}/rest/v1/dashboard_weights"
+    headers = {
+        "apikey": key,
+        "Authorization": f"Bearer {key}",
+    }
+    params = {
+        "profile": f"eq.{profile}",
+        "select": "weights_json",
+        "limit": "1",
+    }
+
+    try:
+        resp = requests.get(endpoint, headers=headers, params=params, timeout=10)
+        resp.raise_for_status()
+        rows = resp.json()
+
+        if rows and "weights_json" in rows[0]:
+            stored = rows[0]["weights_json"]
+            return {
+                "global": stored.get("global", DEFAULT_WEIGHTS_CONFIG["global"]).copy(),
+                "softs": stored.get("softs", DEFAULT_WEIGHTS_CONFIG["softs"]).copy(),
+                "grains": stored.get("grains", DEFAULT_WEIGHTS_CONFIG["grains"]).copy(),
+            }
+
+    except Exception as e:
+        st.sidebar.warning(f"Could not load saved weights. Using defaults.")
+
+    return DEFAULT_WEIGHTS_CONFIG.copy()
+
+
+def save_weights_to_store(weights_config: dict) -> bool:
+    """
+    Save weights to Supabase.
+    """
+    url, key, profile = get_supabase_config()
+
+    if not url or not key:
+        st.sidebar.error("Supabase is not configured in secrets.")
+        return False
+
+    endpoint = f"{url}/rest/v1/dashboard_weights"
+    headers = {
+        "apikey": key,
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+        "Prefer": "resolution=merge-duplicates",
+    }
+
+    payload = {
+        "profile": profile,
+        "weights_json": weights_config,
+    }
+
+    try:
+        resp = requests.post(
+            f"{endpoint}?on_conflict=profile",
+            headers=headers,
+            data=json.dumps(payload),
+            timeout=10,
+        )
+        resp.raise_for_status()
+        return True
+    except Exception:
+        st.sidebar.error("Could not save weights.")
+        return False
+
+
+def get_current_weights_config_from_session() -> dict:
+    return {
+        "global": {
+            "cotton_momentum": st.session_state["w_cotton"],
+            "spread_structure": st.session_state["w_spread"],
+            "soft_complex": st.session_state["w_softs"],
+            "agri_complex": st.session_state["w_agri"],
+            "energy": st.session_state["w_energy"],
+            "macro": st.session_state["w_macro"],
+        },
+        "softs": {
+            "sugar": st.session_state["w_sugar"],
+            "coffee": st.session_state["w_coffee"],
+            "cocoa": st.session_state["w_cocoa"],
+        },
+        "grains": {
+            "corn": st.session_state["w_corn"],
+            "soybeans": st.session_state["w_soybeans"],
+            "wheat": st.session_state["w_wheat"],
+        },
+    }
+
+
+def initialize_weight_session_state():
+    if "weights_initialized" not in st.session_state:
+        saved = load_weights_from_store()
+
+        st.session_state["w_cotton"] = saved["global"]["cotton_momentum"]
+        st.session_state["w_spread"] = saved["global"]["spread_structure"]
+        st.session_state["w_softs"] = saved["global"]["soft_complex"]
+        st.session_state["w_agri"] = saved["global"]["agri_complex"]
+        st.session_state["w_energy"] = saved["global"]["energy"]
+        st.session_state["w_macro"] = saved["global"]["macro"]
+
+        st.session_state["w_sugar"] = saved["softs"]["sugar"]
+        st.session_state["w_coffee"] = saved["softs"]["coffee"]
+        st.session_state["w_cocoa"] = saved["softs"]["cocoa"]
+
+        st.session_state["w_corn"] = saved["grains"]["corn"]
+        st.session_state["w_soybeans"] = saved["grains"]["soybeans"]
+        st.session_state["w_wheat"] = saved["grains"]["wheat"]
+
+        st.session_state["weights_initialized"] = True
 
 # ============================================================
 # SIDEBAR — MODEL WEIGHTS
 # ============================================================
+initialize_weight_session_state()
 
 st.sidebar.markdown("## Global Weights")
 
-w_cotton = st.sidebar.number_input("Cotton Momentum", 0.0, 1.0, 0.28, 0.01)
-w_spread = st.sidebar.number_input("Spread Structure", 0.0, 1.0, 0.20, 0.01)
-w_softs = st.sidebar.number_input("Soft Complex", 0.0, 1.0, 0.16, 0.01)
-w_agri = st.sidebar.number_input("Agri Complex", 0.0, 1.0, 0.14, 0.01)
-w_energy = st.sidebar.number_input("Energy", 0.0, 1.0, 0.12, 0.01)
-w_macro = st.sidebar.number_input("Macro", 0.0, 1.0, 0.10, 0.01)
+w_cotton = st.sidebar.number_input(
+    "Cotton Momentum", 0.0, 1.0, step=0.01, key="w_cotton"
+)
+w_spread = st.sidebar.number_input(
+    "Spread Structure", 0.0, 1.0, step=0.01, key="w_spread"
+)
+w_softs = st.sidebar.number_input(
+    "Soft Complex", 0.0, 1.0, step=0.01, key="w_softs"
+)
+w_agri = st.sidebar.number_input(
+    "Agri Complex", 0.0, 1.0, step=0.01, key="w_agri"
+)
+w_energy = st.sidebar.number_input(
+    "Energy", 0.0, 1.0, step=0.01, key="w_energy"
+)
+w_macro = st.sidebar.number_input(
+    "Macro", 0.0, 1.0, step=0.01, key="w_macro"
+)
 
 weights = {
     "cotton_momentum": w_cotton,
@@ -347,9 +515,9 @@ Macro: {norm_global['macro']:.2f}
 st.sidebar.markdown("---")
 st.sidebar.markdown("## Softs Weights")
 
-w_sugar = st.sidebar.number_input("Sugar", 0.0, 10.0, 0.33, 0.01, key="w_sugar")
-w_coffee = st.sidebar.number_input("Coffee", 0.0, 10.0, 0.33, 0.01, key="w_coffee")
-w_cocoa = st.sidebar.number_input("Cocoa", 0.0, 10.0, 0.34, 0.01, key="w_cocoa")
+w_sugar = st.sidebar.number_input("Sugar", 0.0, 10.0, step=0.01, key="w_sugar")
+w_coffee = st.sidebar.number_input("Coffee", 0.0, 10.0, step=0.01, key="w_coffee")
+w_cocoa = st.sidebar.number_input("Cocoa", 0.0, 10.0, step=0.01, key="w_cocoa")
 
 softs_internal_weights = {
     "sugar": w_sugar,
@@ -365,9 +533,9 @@ if softs_internal_total <= 0:
 st.sidebar.markdown("---")
 st.sidebar.markdown("## Grains & Oilseeds Weights")
 
-w_corn = st.sidebar.number_input("Corn", 0.0, 10.0, 0.34, 0.01, key="w_corn")
-w_soybeans = st.sidebar.number_input("Soybeans", 0.0, 10.0, 0.33, 0.01, key="w_soybeans")
-w_wheat = st.sidebar.number_input("Wheat", 0.0, 10.0, 0.33, 0.01, key="w_wheat")
+w_corn = st.sidebar.number_input("Corn", 0.0, 10.0, step=0.01, key="w_corn")
+w_soybeans = st.sidebar.number_input("Soybeans", 0.0, 10.0, step=0.01, key="w_soybeans")
+w_wheat = st.sidebar.number_input("Wheat", 0.0, 10.0, step=0.01, key="w_wheat")
 
 grains_internal_weights = {
     "corn": w_corn,
@@ -381,17 +549,35 @@ if grains_internal_total <= 0:
     st.sidebar.warning("Grains total should be > 0")
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("### Normalized Internal Weights")
 
-norm_softs = normalize_weights(softs_internal_weights)
-norm_grains = normalize_weights(grains_internal_weights)
+col_save, col_reset = st.sidebar.columns(2)
 
-st.sidebar.markdown(
-    f"**Softs** — Sugar: {norm_softs['sugar']:.2f}, Coffee: {norm_softs['coffee']:.2f}, Cocoa: {norm_softs['cocoa']:.2f}"
-)
-st.sidebar.markdown(
-    f"**Grains** — Corn: {norm_grains['corn']:.2f}, Soybeans: {norm_grains['soybeans']:.2f}, Wheat: {norm_grains['wheat']:.2f}"
-)
+with col_save:
+    if st.button("Save Weights", use_container_width=True):
+        cfg = get_current_weights_config_from_session()
+        if save_weights_to_store(cfg):
+            st.sidebar.success("Weights saved")
+
+with col_reset:
+    if st.button("Reset Defaults", use_container_width=True):
+        defaults = DEFAULT_WEIGHTS_CONFIG
+
+        st.session_state["w_cotton"] = defaults["global"]["cotton_momentum"]
+        st.session_state["w_spread"] = defaults["global"]["spread_structure"]
+        st.session_state["w_softs"] = defaults["global"]["soft_complex"]
+        st.session_state["w_agri"] = defaults["global"]["agri_complex"]
+        st.session_state["w_energy"] = defaults["global"]["energy"]
+        st.session_state["w_macro"] = defaults["global"]["macro"]
+
+        st.session_state["w_sugar"] = defaults["softs"]["sugar"]
+        st.session_state["w_coffee"] = defaults["softs"]["coffee"]
+        st.session_state["w_cocoa"] = defaults["softs"]["cocoa"]
+
+        st.session_state["w_corn"] = defaults["grains"]["corn"]
+        st.session_state["w_soybeans"] = defaults["grains"]["soybeans"]
+        st.session_state["w_wheat"] = defaults["grains"]["wheat"]
+
+        st.rerun()
 
 # ============================================================
 # BUILD THE CORE SIMULATED DATASET
@@ -493,7 +679,7 @@ signals = {
     ),
 }
 
-composite_score = weighted_composite_score(signals, weights)
+composite_score = weighted_composite_score(signals, norm_global)
 signal_label = classify_score(composite_score)
 
 pretty_block_names = {
@@ -511,8 +697,8 @@ for k, v in signals.items():
         {
             "Block": pretty_block_names.get(k, k),
             "Signal": round(v, 2),
-            "Weight": round(weights[k], 2),
-            "Contribution": round(v * weights[k], 2),
+            "Weight": round(norm_global[k], 2),
+            "Contribution": round(v * norm_global[k], 2),
         }
     )
 
@@ -1123,12 +1309,12 @@ st.markdown('</div>', unsafe_allow_html=True)
 st.divider()
 
 bullish = sorted(
-    [(k, v * weights[k]) for k, v in signals.items()],
+    [(k, v * norm_global[k]) for k, v in signals.items()],
     key=lambda x: x[1],
     reverse=True,
 )
 bearish = sorted(
-    [(k, v * weights[k]) for k, v in signals.items()],
+    [(k, v * norm_global[k]) for k, v in signals.items()],
     key=lambda x: x[1],
 )
 
