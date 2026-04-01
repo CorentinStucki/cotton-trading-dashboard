@@ -206,7 +206,7 @@ def normalize_weights(weight_dict: dict[str, float]) -> dict[str, float]:
 
 def weighted_group_score(signal_dict: dict[str, float], weight_dict: dict[str, float]) -> float:
     norm_weights = normalize_weights(weight_dict)
-    return sum(signal_dict[k] * norm_norm_global[k] for k in signal_dict if k in norm_weights)
+    return sum(signal_dict[k] * norm_weights[k] for k in signal_dict if k in norm_weights)
 
 
 def format_arrow_value(value: float, decimals: int = 2) -> str:
