@@ -1109,7 +1109,6 @@ with top_left:
     st.markdown('<div class="table-card">', unsafe_allow_html=True)
     st.markdown('<div class="section-title">Cotton #2 Indicators</div>', unsafe_allow_html=True)
 
-    softs_avg_intensity = softs_indicator_df["Intensity (%)"].sum().round(0)
     softs_wow_mean = softs_indicator_df["_wow_num"].mean()
     softs_avg_bias = "Bullish" if softs_wow_mean > 0 else "Bearish" if softs_wow_mean < 0 else "Neutral"
     softs_avg_class = "score-bullish" if softs_avg_bias == "Bullish" else "score-bearish" if softs_avg_bias == "Bearish" else "score-neutral"
@@ -1117,9 +1116,8 @@ with top_left:
     st.markdown(
         f"""
         <div style="margin-bottom:0.45rem;">
-            <span style="font-weight:700; color:#f4f7ff;">Softs:</span>
-            <span class="{softs_avg_class}" style="font-weight:700; margin-left:8px;">{softs_avg_intensity:.0f}</span>
-            <span class="{softs_avg_class}" style="font-weight:700; margin-left:10px;">{softs_avg_bias}</span>
+         <span style="font-weight:700; color:#f4f7ff;">Softs</span>
+         <span class="{softs_avg_class}" style="font-weight:700; margin-left:10px;">{softs_avg_bias}</span>
         </div>
         """,
         unsafe_allow_html=True,
@@ -1134,20 +1132,18 @@ with top_left:
 
     st.markdown("<div style='height: 18px;'></div>", unsafe_allow_html=True)
 
-    grains_avg_intensity = grains_indicator_df["Intensity (%)"].sum().round(0)
     grains_wow_mean = grains_indicator_df["_wow_num"].mean()
     grains_avg_bias = "Bullish" if grains_wow_mean > 0 else "Bearish" if grains_wow_mean < 0 else "Neutral"
     grains_avg_class = "score-bullish" if grains_avg_bias == "Bullish" else "score-bearish" if grains_avg_bias == "Bearish" else "score-neutral"
 
     st.markdown(
         f"""
-        <div style="margin-bottom:0.45rem;">
-            <span style="font-weight:700; color:#f4f7ff;">Grains & Oilseeds:</span>
-            <span class="{grains_avg_class}" style="font-weight:700; margin-left:8px;">{grains_avg_intensity:.0f}</span>
-            <span class="{grains_avg_class}" style="font-weight:700; margin-left:10px;">{grains_avg_bias}</span>
+     <div style="margin-bottom:0.45rem;">
+          <span style="font-weight:700; color:#f4f7ff;">Grains & Oilseeds</span>
+           <span class="{grains_avg_class}" style="font-weight:700; margin-left:10px;">{grains_avg_bias}</span>
         </div>
-        """,
-        unsafe_allow_html=True,
+     """,
+     unsafe_allow_html=True,
     )
 
     st.dataframe(
