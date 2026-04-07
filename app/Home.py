@@ -755,53 +755,53 @@ grains_snapshot = {
 }
 
 
-def build_indicator_df(snapshot_dict: dict[str, dict]) -> pd.DataFrame:
+def build_indicator_df(snapshot_dict, internal_weights):
     rows = []
+
+    norm_weights = normalize_weights(internal_weights)
+
     for name, item in snapshot_dict.items():
+
+        key_map = {
+            "Sugar": "sugar",
+            "Coffee": "coffee",
+            "Cocoa": "cocoa",
+            "Corn": "corn",
+            "Soybeans": "soybeans",
+            "Wheat": "wheat",
+        }
+
+        weight_key = key_map[name]
+        weight_value = norm_weights.get(weight_key, 0)
+
         direction = "Bullish" if item["wow_pct"] > 0 else "Bearish" if item["wow_pct"] < 0 else "Neutral"
         bias_arrow = "↑" if direction == "Bullish" else "↓" if direction == "Bearish" else "→"
-        raw_intensity = abs(item["wow_pct"])
 
         rows.append(
             {
                 "Variable": name,
                 "Last": round(item["last"], 2),
+
+                # ✅ NEW: intensity = model weights
+                "Intensity (%)": round(weight_value * 100, 1),
+
                 "DOD": format_arrow_value(item["dod_pct"], 2) + "%",
                 "WOW": format_arrow_value(item["wow_pct"], 2) + "%",
                 "Bias": f"{bias_arrow} {direction}",
+
                 "_dod_num": round(item["dod_pct"], 2),
                 "_wow_num": round(item["wow_pct"], 2),
                 "_bias_text": direction,
-                "_raw_intensity": raw_intensity,
             }
         )
 
-    df_out = pd.DataFrame(rows)
-    total_intensity = df_out["_raw_intensity"].sum()
+    df = pd.DataFrame(rows)
 
-    if total_intensity == 0:
-        df_out["Intensity (%)"] = round(100 / len(df_out), 1)
-    else:
-        df_out["Intensity (%)"] = (df_out["_raw_intensity"] / total_intensity * 100).round(1)
-
-    df_out = df_out[
-        [
-            "Variable",
-            "Last",
-            "Intensity (%)",
-            "DOD",
-            "WOW",
-            "Bias",
-            "_dod_num",
-            "_wow_num",
-            "_bias_text",
-        ]
-    ]
-    return df_out.sort_values("Intensity (%)", ascending=False).reset_index(drop=True)
+    return df.sort_values("Intensity (%)", ascending=False).reset_index(drop=True)
 
 
-softs_indicator_df = build_indicator_df(softs_snapshot)
-grains_indicator_df = build_indicator_df(grains_snapshot)
+softs_indicator_df = build_indicator_df(softs_snapshot, softs_internal_weights)
+grains_indicator_df = build_indicator_df(grains_snapshot, grains_internal_weights)
 
 # ============================================================
 # MARKET MONITOR TABLE BUILDERS
