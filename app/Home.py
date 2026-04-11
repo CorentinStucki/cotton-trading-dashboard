@@ -340,6 +340,43 @@ def convert_market_table_to_signal_format(df: pd.DataFrame) -> pd.DataFrame:
         ["Variable", "Last", "Intensity (%)", "DOD", "WOW", "Bias", "_dod_num", "_wow_num", "_bias_text"]
     ].reset_index(drop=True)
 
+def build_technicals_monthly_df() -> pd.DataFrame:
+    """
+    Placeholder monthly technicals table.
+    Structure matches Viola's requested format and can later be replaced
+    by real Bloomberg / technical indicator calculations.
+    """
+    technical_rows = [
+        {"Variable": "Moving Average", "Last": 1.20, "Intensity (%)": 20.0, "DOD_num": 0.15, "WOW_num": 0.80},
+        {"Variable": "TrendLine", "Last": 1.00, "Intensity (%)": 15.0, "DOD_num": 0.05, "WOW_num": 0.40},
+        {"Variable": "14-Day RSI", "Last": 56.20, "Intensity (%)": 15.0, "DOD_num": 1.10, "WOW_num": 3.40},
+        {"Variable": "MacD", "Last": 0.85, "Intensity (%)": 18.0, "DOD_num": 0.08, "WOW_num": 0.32},
+        {"Variable": "Slow Stochastics", "Last": 61.40, "Intensity (%)": 12.0, "DOD_num": -0.90, "WOW_num": 2.10},
+        {"Variable": "Bollinger Bands", "Last": 0.72, "Intensity (%)": 10.0, "DOD_num": 0.02, "WOW_num": -0.15},
+        {"Variable": "Z-Score", "Last": -0.45, "Intensity (%)": 10.0, "DOD_num": 0.03, "WOW_num": -0.20},
+    ]
+
+    rows = []
+    for r in technical_rows:
+        direction = "Bullish" if r["WOW_num"] > 0 else "Bearish" if r["WOW_num"] < 0 else "Neutral"
+        bias_arrow = "↑" if direction == "Bullish" else "↓" if direction == "Bearish" else "→"
+
+        rows.append(
+            {
+                "Variable": r["Variable"],
+                "Last": r["Last"],
+                "Intensity (%)": r["Intensity (%)"],
+                "DOD": format_arrow_value(r["DOD_num"], 2),
+                "WOW": format_arrow_value(r["WOW_num"], 2),
+                "Bias": f"{bias_arrow} {direction}",
+                "_dod_num": r["DOD_num"],
+                "_wow_num": r["WOW_num"],
+                "_bias_text": direction,
+            }
+        )
+
+    return pd.DataFrame(rows)
+
 # ============================================================
 # PERSISTENT WEIGHTS STORAGE (SUPABASE)
 # ============================================================
@@ -860,6 +897,7 @@ def build_indicator_df(snapshot_dict, internal_weights):
 
 softs_indicator_df = build_indicator_df(softs_snapshot, softs_internal_weights)
 grains_indicator_df = build_indicator_df(grains_snapshot, grains_internal_weights)
+technicals_monthly_df = build_technicals_monthly_df()
 
 # ============================================================
 # MARKET MONITOR TABLE BUILDERS
@@ -1258,6 +1296,18 @@ with top_right:
         hide_index=True,
         height=255,
     )
+    st.markdown('</div>', unsafe_allow_html=True)
+
+        st.markdown('<div class="table-card">', unsafe_allow_html=True)
+    st.markdown('<div class="section-title">Technicals (Monthly Chart)</div>', unsafe_allow_html=True)
+
+    st.dataframe(
+        style_indicator_table(technicals_monthly_df),
+        use_container_width=True,
+        hide_index=True,
+        height=290,
+    )
+
     st.markdown('</div>', unsafe_allow_html=True)
 
 mid_left, mid_right = st.columns([0.5, 0.5], gap="large")
