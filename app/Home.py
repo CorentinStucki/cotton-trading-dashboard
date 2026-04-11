@@ -1298,7 +1298,7 @@ with top_right:
     )
     st.markdown('</div>', unsafe_allow_html=True)
 
-        st.markdown('<div class="table-card">', unsafe_allow_html=True)
+    st.markdown('<div class="table-card">', unsafe_allow_html=True)
     st.markdown('<div class="section-title">Technicals (Monthly Chart)</div>', unsafe_allow_html=True)
 
     st.dataframe(
