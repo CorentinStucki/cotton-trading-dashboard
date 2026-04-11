@@ -553,9 +553,9 @@ st.sidebar.markdown("---")
 st.sidebar.markdown("## Softs Weights")
 
 w_cotton_soft = st.sidebar.number_input("Cotton", 0.0, 10.0, 0.25, 0.01, key="w_cotton_soft")
-w_sugar = st.sidebar.number_input("Sugar", 0.0, 10.0, 0.25, 0.01, key="w_sugar")
-w_cocoa = st.sidebar.number_input("Cocoa", 0.0, 10.0, 0.25, 0.01, key="w_cocoa")
-w_coffee = st.sidebar.number_input("Coffee", 0.0, 10.0, 0.25, 0.01, key="w_coffee")
+w_sugar = st.sidebar.number_input("Sugar", min_value=0.0, max_value=10.0, step=0.01, key="w_sugar")
+w_coffee = st.sidebar.number_input("Coffee", min_value=0.0, max_value=10.0, step=0.01, key="w_coffee")
+w_cocoa = st.sidebar.number_input("Cocoa", min_value=0.0, max_value=10.0, step=0.01, key="w_cocoa")
 
 softs_internal_weights = {
     "cotton": w_cotton_soft,
