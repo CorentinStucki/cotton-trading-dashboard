@@ -48,8 +48,8 @@ st.markdown(
     }
 
     .dashboard-title {
-        font-size: 4.2rem;
-        font-weight: 800;
+        font-size: 2.7rem;
+        font-weight: 700;
         color: #f4f7ff;
         margin-bottom: 0.2rem;
         line-height: 1.05;
@@ -303,6 +303,43 @@ def style_indicator_table(df: pd.DataFrame):
     )
     return styler
 
+def convert_market_table_to_signal_format(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Convert market monitor tables into the same structure as Softs table:
+    Variable / Last / Intensity (%) / DOD / WOW / Bias
+    """
+    out = df.copy()
+
+    out["Variable"] = out["Ticker"]
+    out["Last"] = out["Last Price"]
+
+    # Use absolute daily move as a proxy for intensity, normalized to 100%
+    abs_moves = out["_pct_num"].abs()
+    total_abs = abs_moves.sum()
+
+    if total_abs == 0:
+        out["Intensity (%)"] = round(100 / len(out), 1)
+    else:
+        out["Intensity (%)"] = (abs_moves / total_abs * 100).round(1)
+
+    # DOD and WOW are approximated from current daily change
+    out["DOD"] = out["_pct_num"].apply(lambda x: format_arrow_value(x, 2) + "%")
+    out["WOW"] = out["_pct_num"].apply(lambda x: format_arrow_value(x, 2) + "%")
+
+    out["_dod_num"] = out["_pct_num"].round(2)
+    out["_wow_num"] = out["_pct_num"].round(2)
+
+    out["_bias_text"] = out["_pct_num"].apply(
+        lambda x: "Bullish" if x > 0 else "Bearish" if x < 0 else "Neutral"
+    )
+    out["Bias"] = out["_bias_text"].apply(
+        lambda x: f"↑ {x}" if x == "Bullish" else f"↓ {x}" if x == "Bearish" else f"→ {x}"
+    )
+
+    return out[
+        ["Variable", "Last", "Intensity (%)", "DOD", "WOW", "Bias", "_dod_num", "_wow_num", "_bias_text"]
+    ].reset_index(drop=True)
+
 # ============================================================
 # PERSISTENT WEIGHTS STORAGE (SUPABASE)
 # ============================================================
@@ -515,14 +552,16 @@ Macro: {norm_global['macro']:.2f}
 st.sidebar.markdown("---")
 st.sidebar.markdown("## Softs Weights")
 
-w_sugar = st.sidebar.number_input("Sugar", 0.0, 10.0, step=0.01, key="w_sugar")
-w_coffee = st.sidebar.number_input("Coffee", 0.0, 10.0, step=0.01, key="w_coffee")
-w_cocoa = st.sidebar.number_input("Cocoa", 0.0, 10.0, step=0.01, key="w_cocoa")
+w_cotton_soft = st.sidebar.number_input("Cotton", 0.0, 10.0, 0.25, 0.01, key="w_cotton_soft")
+w_sugar = st.sidebar.number_input("Sugar", 0.0, 10.0, 0.25, 0.01, key="w_sugar")
+w_cocoa = st.sidebar.number_input("Cocoa", 0.0, 10.0, 0.25, 0.01, key="w_cocoa")
+w_coffee = st.sidebar.number_input("Coffee", 0.0, 10.0, 0.25, 0.01, key="w_coffee")
 
 softs_internal_weights = {
+    "cotton": w_cotton_soft,
     "sugar": w_sugar,
-    "coffee": w_coffee,
     "cocoa": w_cocoa,
+    "coffee": w_coffee,
 }
 
 softs_internal_total = sum(softs_internal_weights.values())
@@ -640,9 +679,22 @@ week_ago = df.iloc[-6] if len(df) >= 6 else df.iloc[0]
 # ============================================================
 
 softs_subsignals = {
-    "sugar": normalize_change_to_signal(pct_change(latest["SB1"], df["SB1"].iloc[-6]), scale=2.2),
-    "coffee": normalize_change_to_signal(pct_change(latest["KC1"], df["KC1"].iloc[-6]), scale=2.2),
-    "cocoa": normalize_change_to_signal(pct_change(latest["CC1"], df["CC1"].iloc[-6]), scale=2.2),
+    "cotton": normalize_change_to_signal(
+        pct_change(latest["CT1"], df["CT1"].iloc[-6]),
+        scale=2.2,
+    ),
+    "sugar": normalize_change_to_signal(
+        pct_change(latest["SB1"], df["SB1"].iloc[-6]),
+        scale=2.2,
+    ),
+    "cocoa": normalize_change_to_signal(
+        pct_change(latest["CC1"], df["CC1"].iloc[-6]),
+        scale=2.2,
+    ),
+    "coffee": normalize_change_to_signal(
+        pct_change(latest["KC1"], df["KC1"].iloc[-6]),
+        scale=2.2,
+    ),
 }
 
 grains_subsignals = {
@@ -719,20 +771,25 @@ else:
 # ============================================================
 
 softs_snapshot = {
+    "Cotton": {
+        "last": latest["CT1"],
+        "dod_pct": pct_change(latest["CT1"], prev["CT1"]),
+        "wow_pct": pct_change(latest["CT1"], week_ago["CT1"]),
+    },
     "Sugar": {
         "last": latest["SB1"],
         "dod_pct": pct_change(latest["SB1"], prev["SB1"]),
         "wow_pct": pct_change(latest["SB1"], week_ago["SB1"]),
     },
-    "Coffee": {
-        "last": latest["KC1"],
-        "dod_pct": pct_change(latest["KC1"], prev["KC1"]),
-        "wow_pct": pct_change(latest["KC1"], week_ago["KC1"]),
-    },
     "Cocoa": {
         "last": latest["CC1"],
         "dod_pct": pct_change(latest["CC1"], prev["CC1"]),
         "wow_pct": pct_change(latest["CC1"], week_ago["CC1"]),
+    },
+    "Coffee": {
+        "last": latest["KC1"],
+        "dod_pct": pct_change(latest["KC1"], prev["KC1"]),
+        "wow_pct": pct_change(latest["KC1"], week_ago["KC1"]),
     },
 }
 
@@ -763,6 +820,7 @@ def build_indicator_df(snapshot_dict, internal_weights):
     for name, item in snapshot_dict.items():
 
         key_map = {
+            "Cotton": "cotton",
             "Sugar": "sugar",
             "Coffee": "coffee",
             "Cocoa": "cocoa",
@@ -970,7 +1028,17 @@ def build_market_monitor_tables():
 
 
 market_tables = build_market_monitor_tables()
+others_table = convert_market_table_to_signal_format(market_tables["broad"])
+energy_table = convert_market_table_to_signal_format(market_tables["energy"])
+metals_table = convert_market_table_to_signal_format(market_tables["metals"])
 
+china_energy_table = convert_market_table_to_signal_format(market_tables["china_energy"])
+china_metals_table = convert_market_table_to_signal_format(market_tables["china_metals"])
+china_agriculture_table = convert_market_table_to_signal_format(market_tables["china_agriculture"])
+
+asia_table = convert_market_table_to_signal_format(market_tables["indices_asia"])
+us_table = convert_market_table_to_signal_format(market_tables["indices_america"])
+europe_table = convert_market_table_to_signal_format(market_tables["indices_europe"])
 # ============================================================
 # HEADER
 # ============================================================
@@ -993,7 +1061,7 @@ with top1:
     st.markdown(
         f"""
         <div class="top-card">
-            <div class="top-card-label">CTK1</div>
+            <div class="top-card-label">CTK6</div>
             <div class="top-card-value">{latest["CT1"]:.2f}</div>
             <div class="top-card-sub {cotton_intraday_class}">
                 {cotton_intraday_arrow} {cotton_intraday:+.2f} ({cotton_intraday_pct:+.2f}%)
@@ -1196,14 +1264,13 @@ mid_left, mid_right = st.columns([0.5, 0.5], gap="large")
 
 with mid_left:
     st.markdown('<div class="table-card">', unsafe_allow_html=True)
-    st.markdown('<div class="section-title">Overview Commodity</div>', unsafe_allow_html=True)
 
     overview_left, overview_right = st.columns([0.48, 0.52], gap="large")
 
     with overview_left:
-        st.markdown("**Broad**")
+        st.markdown("**Others**")
         st.dataframe(
-            style_market_table(market_tables["broad"]),
+            style_indicator_table(others_table),
             use_container_width=True,
             hide_index=True,
             height=165,
@@ -1212,7 +1279,7 @@ with mid_left:
     with overview_right:
         st.markdown("**Energy**")
         st.dataframe(
-            style_market_table(market_tables["energy"]),
+            style_indicator_table(energy_table),
             use_container_width=True,
             hide_index=True,
             height=315,
@@ -1220,18 +1287,10 @@ with mid_left:
 
         st.markdown("**Metals**")
         st.dataframe(
-            style_market_table(market_tables["metals"]),
-            use_container_width=True,
-            hide_index=True,
-            height=455,
-        )
-
-    st.markdown("**Agriculture / Softs**")
-    st.dataframe(
-        style_market_table(market_tables["agriculture"]),
+        style_indicator_table(metals_table),
         use_container_width=True,
         hide_index=True,
-        height=350,
+        height=455,
     )
 
     st.markdown('</div>', unsafe_allow_html=True)
@@ -1242,7 +1301,7 @@ with mid_right:
 
     st.markdown("**Energy**")
     st.dataframe(
-        style_market_table_int(market_tables["china_energy"]),
+        style_indicator_table(china_energy_table),
         use_container_width=True,
         hide_index=True,
         height=155,
@@ -1250,7 +1309,7 @@ with mid_right:
 
     st.markdown("**Metals**")
     st.dataframe(
-        style_market_table_int(market_tables["china_metals"]),
+        style_indicator_table(china_metals_table),
         use_container_width=True,
         hide_index=True,
         height=455,
@@ -1258,7 +1317,7 @@ with mid_right:
 
     st.markdown("**Agriculture / Softs / Oilseeds**")
     st.dataframe(
-        style_market_table_int(market_tables["china_agriculture"]),
+        style_indicator_table(china_agriculture_table),
         use_container_width=True,
         hide_index=True,
         height=470,
@@ -1269,23 +1328,22 @@ with mid_right:
 st.divider()
 
 st.markdown('<div class="table-card">', unsafe_allow_html=True)
-st.markdown('<div class="section-title">Overview Indices</div>', unsafe_allow_html=True)
 
 idx_col1, idx_col2, idx_col3 = st.columns(3)
 
 with idx_col1:
-    st.markdown("**Asia / Pacific**")
+    st.markdown("**Asia**")
     st.dataframe(
-        style_market_table_int(market_tables["indices_asia"]),
+        style_indicator_table(asia_table),
         use_container_width=True,
         hide_index=True,
         height=385,
     )
 
 with idx_col2:
-    st.markdown("**America**")
+    st.markdown("**The US**")
     st.dataframe(
-        style_market_table_int(market_tables["indices_america"]),
+        style_indicator_table(us_table),
         use_container_width=True,
         hide_index=True,
         height=385,
@@ -1294,7 +1352,7 @@ with idx_col2:
 with idx_col3:
     st.markdown("**Europe**")
     st.dataframe(
-        style_market_table_int(market_tables["indices_europe"]),
+        style_indicator_table(europe_table),
         use_container_width=True,
         hide_index=True,
         height=385,
